@@ -1,0 +1,278 @@
+// `omw run <wf> --agent <a> [--args JSON] [--concurrency N] [--pretty]`.
+// Parsing is a pure function so the input contract is testable without touching
+// the filesystem, a clock, or a subprocess.
+
+import { appendFileSync, mkdirSync, statSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
+import type { AgentPort } from "../adapters/types";
+import { makeFakeAdapter, type FakeAdapterOptions } from "../adapters/fake";
+import type { Runtime } from "../runtime";
+import { makeRuntime } from "../runtime";
+import { makeJournal } from "../journal";
+
+export type RunOptions = {
+  wfPath: string;
+  agent: string;
+  args: unknown;
+  concurrency?: number;
+  pretty: boolean;
+};
+
+export type ParseResult =
+  | { ok: true; value: RunOptions }
+  | { ok: false; error: string };
+
+export function parseRunArgs(argv: string[]): ParseResult {
+  let wfPath: string | undefined;
+  let agent: string | undefined;
+  let args: unknown;
+  let concurrency: number | undefined;
+  let pretty = false;
+
+  for (let i = 0; i < argv.length; i++) {
+    const tok = argv[i]!;
+    switch (tok) {
+      case "--agent":
+        agent = argv[++i];
+        break;
+      case "--args": {
+        const raw = argv[++i];
+        try {
+          args = JSON.parse(raw!);
+        } catch {
+          return { ok: false, error: `--args must be valid JSON, got: ${raw}` };
+        }
+        break;
+      }
+      case "--concurrency":
+        concurrency = Number(argv[++i]);
+        break;
+      case "--pretty":
+        pretty = true;
+        break;
+      default:
+        if (wfPath === undefined) wfPath = tok;
+        else return { ok: false, error: `unexpected argument: ${tok}` };
+    }
+  }
+
+  if (wfPath === undefined) return { ok: false, error: "missing workflow path" };
+  if (agent === undefined) return { ok: false, error: "missing --agent <name>" };
+
+  return { ok: true, value: { wfPath, agent, args, concurrency, pretty } };
+}
+
+// ── workflow execution ──────────────────────────────────────────────────────
+
+/** A loaded workflow module. The orchestration script the host agent authors is
+ *  the default export; `fake` is optional fixtures used only by `--agent fake`
+ *  so the example is deterministic green with no API key. */
+export type LoadedWorkflow = {
+  workflow: (rt: Runtime, args: unknown) => unknown | Promise<unknown>;
+  fake?: FakeAdapterOptions;
+};
+
+/** Either a ready adapter, or a structured "not installed" signal (exit 3). */
+export type AdapterResolution =
+  | { adapter: AgentPort }
+  | { missing: string; installHint: string };
+
+/** Entry filenames tried, in order, when a workflow path is a directory. */
+const ENTRY_NAMES = ["workflow.ts", "workflow.js", "index.ts", "index.js"];
+
+/** Load a workflow module from a file path or a directory (resolved to its
+ *  conventional entry). The default export is the orchestration fn; a missing
+ *  default is an authoring bug surfaced as a load error, not a silent no-op. */
+export async function loadWorkflow(wfPath: string): Promise<LoadedWorkflow> {
+  const abs = isAbsolute(wfPath) ? wfPath : resolve(process.cwd(), wfPath);
+  let entry = abs;
+  let isDir = false;
+  try {
+    isDir = statSync(abs).isDirectory();
+  } catch {
+    throw new Error(`workflow path not found: ${wfPath}`);
+  }
+  if (isDir) {
+    const found = ENTRY_NAMES.map((n) => join(abs, n)).find((p) => {
+      try {
+        return statSync(p).isFile();
+      } catch {
+        return false;
+      }
+    });
+    if (!found) throw new Error(`no workflow entry (${ENTRY_NAMES.join(", ")}) in directory: ${wfPath}`);
+    entry = found;
+  }
+
+  const mod = await import(entry);
+  if (typeof mod.default !== "function") {
+    throw new Error(`workflow ${wfPath} must default-export a function (rt, args) => result`);
+  }
+  return { workflow: mod.default, fake: mod.fake };
+}
+
+export type RunDeps = {
+  loadWorkflow: (wfPath: string) => Promise<LoadedWorkflow>;
+  resolveAdapter: (name: string, wf: LoadedWorkflow) => AdapterResolution;
+  journalSink: (line: string) => void;
+  now: () => number;
+  runId: () => string;
+  /** Optional human-facing tree (--pretty). Pure side-channel; never stdout. */
+  stderr?: (line: string) => void;
+};
+
+export type RunOutcome = {
+  exitCode: number;
+  /** The result JSON — a single blob, stdout only. Present on exit 0. */
+  stdout?: string;
+  /** Structured error for stderr on a non-zero exit. */
+  error?: object;
+};
+
+const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunOutcome> {
+  let loaded: LoadedWorkflow;
+  try {
+    loaded = await deps.loadWorkflow(opts.wfPath);
+  } catch (e) {
+    return { exitCode: 1, error: { error: "load_failed", message: errMsg(e), wf: opts.wfPath } };
+  }
+
+  const resolved = deps.resolveAdapter(opts.agent, loaded);
+  if ("missing" in resolved) {
+    return {
+      exitCode: 3,
+      error: { error: "adapter_missing", adapter: resolved.missing, install_hint: resolved.installHint },
+    };
+  }
+
+  const runId = deps.runId();
+  const journal = makeJournal({ sink: deps.journalSink, now: deps.now });
+  const rt = makeRuntime({ adapter: resolved.adapter, journal, concurrency: opts.concurrency });
+
+  journal.runStart({ run: runId, wf: opts.wfPath });
+  try {
+    const result = await loaded.workflow(rt, opts.args);
+    journal.runEnd({ ok: true });
+    return { exitCode: 0, stdout: JSON.stringify(result) };
+  } catch (e) {
+    // A throw escaping the workflow body is a SCRIPT error (the authored JS), not
+    // a node failure — node failures are swallowed by the null-contract. Exit 1.
+    journal.runEnd({ ok: false });
+    return { exitCode: 1, error: { error: "script_error", message: errMsg(e), wf: opts.wfPath } };
+  }
+}
+
+// ── adapter resolution ──────────────────────────────────────────────────────
+
+/** Install hints surfaced (exit 3) when an adapter's CLI isn't on PATH. The
+ *  `fake` adapter is always available — it is the free, no-key demo engine. */
+const INSTALL_HINTS: Record<string, string> = {
+  claude: "npm i -g @anthropic-ai/claude-code  (then `claude login`)",
+  codex: "npm i -g @openai/codex  (experimental adapter)",
+  pi: "see https://github.com/parallel-ai/pi  (experimental adapter)",
+};
+
+export function resolveAdapter(name: string, wf: LoadedWorkflow): AdapterResolution {
+  if (name === "fake") return { adapter: makeFakeAdapter(wf.fake) };
+  // Real adapters land here as they are built; until then, fail actionably
+  // rather than silently — the journal/exit code tells the user what to install.
+  return {
+    missing: name,
+    installHint: INSTALL_HINTS[name] ?? `unknown adapter "${name}". Try --agent fake for the free demo.`,
+  };
+}
+
+// ── process wiring (the bin entry calls runCommand) ─────────────────────────
+
+export type Io = {
+  stdout: (s: string) => void;
+  stderr: (s: string) => void;
+  /** Directory for journal files; defaults to ".omw". */
+  omwDir?: string;
+  runId?: () => string;
+};
+
+const defaultRunId = (): string => "r-" + Date.now().toString(36);
+
+/** Wire real fs/import deps and run. Returns the exit code; writes the result
+ *  JSON to stdout, the journal to <omwDir>/<runId>.jsonl, and any error JSON to
+ *  stderr. Usage errors (parse failures) are exit 2. */
+export async function runCommand(argv: string[], io: Io): Promise<number> {
+  const parsed = parseRunArgs(argv);
+  if (!parsed.ok) {
+    io.stderr(JSON.stringify({ error: "usage", message: parsed.error }));
+    io.stderr(
+      "\nusage: omw run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--pretty]",
+    );
+    return 2;
+  }
+
+  const omwDir = io.omwDir ?? ".omw";
+  const runId = (io.runId ?? defaultRunId)();
+  const journalPath = join(omwDir, `${runId}.jsonl`);
+  mkdirSync(omwDir, { recursive: true });
+
+  const events: string[] = [];
+  const outcome = await runWorkflow(parsed.value, {
+    loadWorkflow,
+    resolveAdapter,
+    journalSink: (line) => {
+      events.push(line);
+      appendFileSync(journalPath, line + "\n");
+    },
+    now: () => Date.now(),
+    runId: () => runId,
+  });
+
+  if (outcome.exitCode === 0 && outcome.stdout !== undefined) {
+    io.stdout(outcome.stdout + "\n");
+  } else if (outcome.error) {
+    io.stderr(JSON.stringify(outcome.error) + "\n");
+  }
+
+  // Only surface the journal when a run actually recorded one — a load/adapter
+  // failure (exit 1/3) writes no events, so pointing at an empty file misleads.
+  if (events.length > 0) {
+    if (parsed.value.pretty) io.stderr(renderTree(events) + "\n");
+    io.stderr(`journal: ${journalPath}\n`);
+  }
+  return outcome.exitCode;
+}
+
+/** A phase/fan-out tree from journal JSONL lines — the --pretty side-channel and
+ *  the shared renderer reused by `omw replay`. Pure: events in, string out. */
+export function renderTree(lines: string[]): string {
+  const out: string[] = [];
+  let ok = 0;
+  let failed = 0;
+  for (const line of lines) {
+    let e: any;
+    try {
+      e = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    switch (e.ev) {
+      case "run_start":
+        out.push(`run ${e.run}${e.wf ? ` (${e.wf})` : ""}`);
+        break;
+      case "phase":
+        out.push(`  ▸ ${e.title}`);
+        break;
+      case "agent_start":
+        out.push(`    • ${e.label ?? `call#${e.call}`} [${e.adapter}]`);
+        break;
+      case "agent_end":
+        if (e.ok) ok++;
+        else failed++;
+        out.push(`      ${e.ok ? "✓" : `✗ ${e.kind ?? "fail"}`} call#${e.call}`);
+        break;
+      case "run_end":
+        out.push(`run_end ok=${e.ok} · ${ok} ok / ${failed} failed`);
+        break;
+    }
+  }
+  return out.join("\n");
+}
