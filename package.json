@@ -1,8 +1,12 @@
 {
   "name": "oh-my-workflow",
-  "version": "0.0.1",
-  "description": "Run coding-agent CLIs (claude -p / codex exec / pi) as nodes in a plain-JS workflow. The thin deterministic glue.",
+  "version": "0.1.0",
+  "description": "Run coding-agent CLIs (claude -p / codex exec) as nodes in a plain-JS workflow. The thin deterministic glue.",
   "type": "module",
+  "author": "Dongwook Kim (https://github.com/domuk-k)",
+  "engines": {
+    "bun": ">=1.0.0"
+  },
   "files": [
     "src",
     "examples",
@@ -15,6 +19,13 @@
     "url": "git+https://github.com/domuk-k/oh-my-workflow.git"
   },
   "homepage": "https://github.com/domuk-k/oh-my-workflow#readme",
+  "bugs": "https://github.com/domuk-k/oh-my-workflow/issues",
+  "exports": {
+    ".": "./src/runtime.ts",
+    "./adapters/fake": "./src/adapters/fake.ts",
+    "./package.json": "./package.json"
+  },
+  "types": "./src/runtime.ts",
   "bin": {
     "omw": "./src/cli/omw.ts"
   },
@@ -29,8 +40,14 @@
     "claude",
     "codex",
     "agent",
-    "cli"
+    "cli",
+    "bun",
+    "llm",
+    "ai-agent"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "ajv": "^8.17.1"
   },
