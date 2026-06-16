@@ -105,7 +105,10 @@ A node is a coding agent driven through its headless prompt→result CLI.
 | **pi** | planned | not wired yet (`--agent pi` → exit 3 + install hint) |
 | **kiro** | not a fit | its CLI is an IDE launcher (open files/diffs), no headless prompt→result interface |
 
-A missing CLI exits `3` with an `install_hint` instead of failing mid-run.
+A missing CLI exits `3` with an `install_hint` instead of failing mid-run. A node
+that hits `internal_error` (e.g. an invalid JSON Schema) escalates the run to exit
+`4` (result still on stdout) so an author bug doesn't hide behind the null-contract.
+`omw validate <wf>` is a pre-flight load + fake-fixture lint that spawns no agents.
 
 ## Honest scope (read before you judge the novelty)
 
@@ -121,11 +124,15 @@ omw externalizes a pattern Claude Code uses internally for dynamic workflows
 - **resume**: the journal format and resume key `(callIndex, promptHash,
   optsHash)` (journaled as `call`) are **frozen and proven byte-stable** (identical re-run = 100% key
   hits; edit the last node = hits up to the first change, then a miss). **Live
-  resume has landed**: `omw run <wf> --resume <journal>` skips nodes whose key
-  hits (adapter not invoked, `agent_end{cached:true}`) and re-runs only
-  failed/changed nodes — verified end-to-end on `--agent fake`. It holds **only
-  for deterministic workflows**: omw can't *enforce* determinism (no sandbox), so
-  that stays a convention you keep (enforcement is v2). `omw replay` remains a
+  resume has landed**: `omw run <wf> --resume <journal>` reuses any node whose
+  `(callIndex, promptHash, optsHash)` key hits (adapter not invoked,
+  `agent_end{cached:true}`) and re-runs the rest — verified end-to-end on
+  `--agent fake`. Resume is **per-node key match, not dependency-aware**: it
+  behaves as longest-unchanged-prefix only when upstream outputs flow into
+  downstream prompts (the usual data-flow shape); a workflow that passes state
+  out-of-band can reuse a downstream node built from an upstream that changed.
+  It holds **only for deterministic workflows**: omw can't *enforce* determinism
+  (no sandbox), so that stays a convention you keep (enforcement is v2). `omw replay` remains a
   read-only **fixture replay** (reconstructing a recorded run's view), a separate
   command — not the resume path.
 - an omw node is a **whole external coding-agent CLI**, heavier than a single

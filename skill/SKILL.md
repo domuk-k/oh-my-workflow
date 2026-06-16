@@ -253,8 +253,17 @@ Failure `kind`s on `agent_end`:
 
 `omw replay .omw/<runId>.jsonl [--json]` reconstructs the tree / a stats summary
 from a journal — a read-only **fixture replay** (reading back what a run
-recorded). For *live* resume (re-executing from the longest unchanged prefix,
-skipping cached nodes), use `omw run <wf> --resume <journal>` — see Scope below.
+recorded). For *live* resume (re-running nodes whose key changed, reusing the
+cached ones), use `omw run <wf> --resume <journal>` — see Scope below.
+
+`omw validate <wf> [--json]` is a pre-flight that loads the module and lints a
+`fake` fixture for the silent-degradation traps (top-level `responses`, a string
+`match`, no rules+default) **without spawning agents** — exit 0 clean, 1 on a
+load/fixture problem. And a node that throws an `internal_error` (e.g. a JSON
+Schema that won't compile) no longer hides behind the null-contract: the run
+escalates to **exit 4** (the partial result still prints to stdout, and a
+`{"error":"internal_error_nodes","calls":[…]}` line goes to stderr), so an author
+bug reads differently from a flaky node abstaining.
 
 ---
 
@@ -360,10 +369,10 @@ self-repair loop, which is the one piece a "subprocess + for-loop" doesn't have.
 **✅ Genuinely the same idea** — model-authored plain-JS orchestration; the
 5-hook shape (`agent`/`pipeline`/`parallel`/`phase`/`log`); `null`-resolution +
 `filter(Boolean)`; schema-forced structured output; a step-by-step journal;
-resume key as a longest-unchanged-prefix model (frozen and **proven byte-stable**
-across re-runs); **live resume** via `omw run --resume <journal>` (cached nodes
-skip the adapter — `agent_end{cached:true}` — and only failed/changed nodes
-re-run; verified end-to-end on `--agent fake`).
+resume key `(callIndex, promptHash, optsHash)` (frozen and **proven byte-stable**
+across re-runs); **live resume** via `omw run --resume <journal>` — a **per-node
+key match** (cached nodes skip the adapter, `agent_end{cached:true}`; nodes whose
+key changed re-run; verified end-to-end on `--agent fake`).
 
 > One honest altitude difference even here: a CC Workflow node is a single
 > in-harness subagent; an **omw node is a whole external coding-agent CLI**
@@ -373,6 +382,12 @@ re-run; verified end-to-end on `--agent fake`).
 - *Determinism enforcement*: CC throws on `Date.now`/`Math.random`; omw treats it
   as a **convention** (no sandbox), so live resume holds **only for workflows that
   keep it**. A guard that *enforces* it in resume mode is v2.
+- *Resume is per-node, not dependency-aware*: it matches `(callIndex, promptHash,
+  optsHash)`, so an upstream edit invalidates a downstream node **only if** that
+  output is threaded into the downstream prompt/opts. Thread outputs through
+  prompts (the deep-research shape) for prefix-like invalidation; otherwise a
+  resumed downstream node can be served stale. Dependency-aware cascade is a
+  candidate for v2.
 
 **❌ Not implemented (CC Workflow has these; omw v1 does not)** — `budget`
 (token-target loops), nested `workflow()` (running another workflow inline), a
@@ -388,5 +403,7 @@ scripts that assume these.
 - Path resolves a directory to `workflow.ts` / `workflow.js` / `index.ts` / `index.js`.
 - `omw run <wf> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--resume <journal.jsonl>] [--pretty]`
 - `omw replay <journal.jsonl> [--json]`
+- `omw validate <wf> [--json]` — pre-flight: load + fake-fixture lint, no agents spawned.
+- exit codes: `0` ok · `1` script/load error · `2` usage · `3` adapter missing · `4` completed but a node hit `internal_error` (author bug; result still on stdout).
 - stdout = result JSON · journal = `.omw/<runId>.jsonl` · `--pretty` tree = stderr.
 - `agent()` never throws → `filter(Boolean)`; quorum of cast votes for verify-vote.
