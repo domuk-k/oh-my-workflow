@@ -2,8 +2,42 @@
 // surface a stranger types is fixed here before any orchestration exists.
 
 import { test, expect, describe } from "bun:test";
-import { parseRunArgs, runWorkflow } from "../src/cli/run";
+import { parseRunArgs, runWorkflow, resolveAdapter } from "../src/cli/run";
 import { makeFakeAdapter } from "../src/adapters/fake";
+
+describe("resolveAdapter", () => {
+  test("fake is always available", () => {
+    const r = resolveAdapter("fake", { workflow: async () => ({}) });
+    expect("adapter" in r && r.adapter.name).toBe("fake");
+  });
+
+  test("claude resolves to the real adapter when the CLI is on PATH", () => {
+    const r = resolveAdapter("claude", { workflow: async () => ({}) }, () => true);
+    expect("adapter" in r && r.adapter.name).toBe("claude");
+  });
+
+  test("claude is adapter_missing (with install hint) when the CLI is absent", () => {
+    const r = resolveAdapter("claude", { workflow: async () => ({}) }, () => false);
+    expect("missing" in r && r.missing).toBe("claude");
+    if (!("missing" in r)) throw new Error("expected missing");
+    expect(r.installHint).toContain("claude");
+  });
+
+  test("codex resolves to the real adapter when the CLI is on PATH", () => {
+    const r = resolveAdapter("codex", { workflow: async () => ({}) }, () => true);
+    expect("adapter" in r && r.adapter.name).toBe("codex");
+  });
+
+  test("codex is adapter_missing when the CLI is absent", () => {
+    const r = resolveAdapter("codex", { workflow: async () => ({}) }, () => false);
+    expect("missing" in r && r.missing).toBe("codex");
+  });
+
+  test("an unknown adapter is missing with a fake fallback hint", () => {
+    const r = resolveAdapter("nope", { workflow: async () => ({}) }, () => false);
+    expect("missing" in r && r.missing).toBe("nope");
+  });
+});
 
 describe("parseRunArgs", () => {
   test("parses wfPath, --agent, --args (JSON), --concurrency, --pretty", () => {

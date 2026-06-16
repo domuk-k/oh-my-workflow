@@ -6,6 +6,8 @@ import { appendFileSync, mkdirSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import type { AgentPort } from "../adapters/types";
 import { makeFakeAdapter, type FakeAdapterOptions } from "../adapters/fake";
+import { makeClaudeAdapter } from "../adapters/claude";
+import { makeCodexAdapter } from "../adapters/codex";
 import type { Runtime } from "../runtime";
 import { makeRuntime } from "../runtime";
 import { makeJournal } from "../journal";
@@ -174,10 +176,26 @@ const INSTALL_HINTS: Record<string, string> = {
   pi: "see https://github.com/parallel-ai/pi  (experimental adapter)",
 };
 
-export function resolveAdapter(name: string, wf: LoadedWorkflow): AdapterResolution {
+/** PATH probe — injected so the missing→installed branch is testable. */
+const defaultBinExists = (bin: string): boolean => Bun.which(bin) != null;
+
+export function resolveAdapter(
+  name: string,
+  wf: LoadedWorkflow,
+  binExists: (bin: string) => boolean = defaultBinExists,
+): AdapterResolution {
   if (name === "fake") return { adapter: makeFakeAdapter(wf.fake) };
-  // Real adapters land here as they are built; until then, fail actionably
-  // rather than silently — the journal/exit code tells the user what to install.
+  if (name === "claude") {
+    // A real adapter exists, but exit 3 (adapter_missing) if the CLI isn't on
+    // PATH — tell the user what to install rather than failing mid-run.
+    if (!binExists("claude")) return { missing: "claude", installHint: INSTALL_HINTS.claude! };
+    return { adapter: makeClaudeAdapter() };
+  }
+  if (name === "codex") {
+    if (!binExists("codex")) return { missing: "codex", installHint: INSTALL_HINTS.codex! };
+    return { adapter: makeCodexAdapter() };
+  }
+  // pi lands here as it is built; until then, fail actionably.
   return {
     missing: name,
     installHint: INSTALL_HINTS[name] ?? `unknown adapter "${name}". Try --agent fake for the free demo.`,
