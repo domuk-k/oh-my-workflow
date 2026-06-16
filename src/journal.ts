@@ -55,6 +55,10 @@ export type JournalEvent =
       kind?: string;
       result?: unknown;
       durationMs?: number;
+      // Incremental v2 field: true when this end was served from a resume index
+      // (the adapter was skipped). Absent on a live run — the 7-event STRUCTURE is
+      // unchanged, so old journals stay readable.
+      cached?: boolean;
       // Diagnostic payload so the authoring agent can read WHY a node failed:
       // adapter stderr, the node's raw non-conforming text, or an internal error.
       stderr?: string;
@@ -84,6 +88,7 @@ export type Journal = {
     kind?: string;
     result?: unknown;
     durationMs?: number;
+    cached?: boolean;
     stderr?: string;
     rawText?: string;
     error?: string;
