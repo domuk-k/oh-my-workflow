@@ -1,0 +1,394 @@
+---
+name: oh-my-workflow
+description: Use when a task decomposes into multiple coding-agent CLI calls (claude -p / codex exec) that should run as one structured, schema-gated, journaled workflow — fan-out search, verify-vote, pipeline, or loop-until-dry. Teaches you to author a plain-JS omw script, run it with `omw run`, read the JSONL journal, and repair your own script from structured failures.
+---
+
+# oh-my-workflow (omw)
+
+You write a **plain-JS orchestration script**. Its nodes are whole coding-agent
+CLIs you already pay for (`claude -p`, `codex exec`). omw is the thin glue: it
+runs your script, schema-gates each node's output, and journals every step — so
+you can read your own failure and fix your own script. (What's "deterministic" is
+scoped below — the engine's guarantees and `--agent fake`, not your script.)
+
+The runtime gives your script exactly **five hooks** (`agent` / `pipeline` /
+`parallel` / `phase` / `log`). That is the entire surface. There is no DSL to
+learn; everything else is ordinary JavaScript control flow.
+
+## When to use this
+
+Reach for omw when a task is a **multi-step pipeline over agent calls** that
+benefits from structure you'd otherwise hand-roll:
+
+- **Fan-out**: run N independent agent calls concurrently, collect results.
+- **Verify / vote**: produce a finding, then have K independent agents judge it.
+- **Pipeline**: each item flows scope → search → verify → synthesize independently.
+- **Loop-until-dry**: keep spawning finders until a round returns nothing new.
+
+You want: bounded concurrency, schema-validated node output with automatic
+node-level retry, a replayable journal, and a `null`-on-failure contract so one
+bad node never crashes the run.
+
+**Don't** use omw for a single agent call, or for work that needs a sandbox
+(omw deliberately has none — your script is trusted code), or where a node is a
+single raw LLM API call (that's LangGraph/Mastra territory; an omw node is a
+*whole coding agent*).
+
+## The 30-second free demo (no API key)
+
+```sh
+git clone <repo-url> && cd oh-my-workflow   # repo not yet public; fill in the URL
+bun install
+bun src/cli/omw.ts run examples/deep-research --agent fake
+# → {"confirmed":[…],"summary":{…}}     exit 0 · no key · no cost · `--agent fake` is deterministic
+```
+
+`--agent fake` is a built-in deterministic adapter: it runs the full spine
+(fan-out + pipeline + a scripted schema-fail→self-repair + a scripted
+timeout→drop) and prints one result JSON. Add `--pretty` to see the phase/fan-out
+tree on stderr. Swap `--agent claude` once you've run `claude login`.
+
+> Once published this is `bunx oh-my-workflow run …`; today run the bin directly
+> from a clone as shown above.
+
+---
+
+## The 5 hooks (the entire API)
+
+Your script is a module that **default-exports** `async (rt, args) => result`.
+`rt` is the runtime; `args` is whatever `--args '{…}'` passed (parsed JSON).
+The returned value is serialized to stdout as the run's single result JSON.
+
+```ts
+export default async function (rt, args) {
+  // rt.agent / rt.pipeline / rt.parallel / rt.phase / rt.log
+  return { /* whatever you want on stdout */ };
+}
+```
+
+### `rt.agent(prompt, opts?) => Promise<result | null>`
+
+Runs one coding-agent CLI node. **Never throws.** A terminal failure resolves to
+`null` (and is journaled with a failure `kind`). This is the load-bearing
+**null-contract** — build on it with `filter(Boolean)` and abstain quorums.
+
+```ts
+const out = await rt.agent("SCOPE the question into topics", {
+  schema: { type: "object", required: ["topics"], properties: { topics: { type: "array" } } },
+  label: "scope",        // shows in the journal / --pretty tree
+  phase: "Scope",        // overrides the ambient phase() for this call
+  model: "smart",        // tier alias or raw model string, passed to the adapter
+  timeoutMs: 120_000,    // kill the subprocess after this; failure kind = "timeout"
+  cwd: "/path/to/repo",  // run the agent in this directory
+  maxRetries: 2,         // schema-gate retries (default 2 → up to 3 attempts)
+});
+```
+
+- **With `schema`**: omw extracts JSON from the node's text, validates it with
+  ajv, and on a mismatch **re-prompts the same node** with the validation errors
+  (in-session via the adapter's resume if available, else fresh + error appended)
+  up to `maxRetries` times. On success `agent()` returns the **validated object**.
+  On exhaustion it returns `null`. **You never see schema noise** — only the
+  structured outcome. The schema is plain JSON Schema.
+- **Without `schema`**: one shot; returns the raw text string, or `null` on
+  adapter failure.
+
+### `rt.parallel(thunks) => Promise<any[]>` — barrier
+
+Runs thunks concurrently, awaits **all** of them. A thunk that throws (or whose
+agent fails) becomes `null` in the result array — the call itself never rejects.
+**`.filter(Boolean)` before using results.** Use only when you need every result
+together (dedup, count, cross-comparison).
+
+```ts
+const results = (await rt.parallel(
+  topics.map((t) => () => rt.agent(`SEARCH ${t}`, { schema: S, label: `search:${t}` })),
+)).filter(Boolean);
+```
+
+### `rt.pipeline(items, ...stages) => Promise<any[]>` — no barrier (default)
+
+Runs each item through **all** stages independently. Item A can be in stage 3
+while item B is still in stage 1 — wall-clock is the slowest single chain, not
+the sum of slowest-per-stage. Each stage receives `(prev, item, index)`. A stage
+that throws drops that item to `null` (skips its remaining stages). This is the
+default for multi-stage work; only use `parallel` as a barrier when a stage
+genuinely needs the whole previous result set at once.
+
+```ts
+const verified = (await rt.pipeline(
+  found,
+  async (f) => {
+    const v = await rt.agent(`VERIFY ${JSON.stringify(f)}`, { schema: V });
+    return v ? { ...f, ...v } : null;     // null → dropped by the filter below
+  },
+)).filter(Boolean);
+```
+
+### `rt.phase(title)` and `rt.log(msg)`
+
+`phase` groups subsequent `agent()` calls under a heading in the journal and the
+`--pretty` tree. `log` emits a narration line. Both are side-channel only — they
+never touch stdout.
+
+### Concurrency
+
+The runtime bounds concurrency **at the `agent()` boundary** (default 4, set with
+`--concurrency N`). `parallel`/`pipeline` themselves don't take a slot, so you can
+pass hundreds of items — only ~N agent subprocesses run at once; the rest queue.
+
+---
+
+## Pattern templates (copy-paste, then adapt)
+
+### Fan-out (barrier)
+
+```ts
+export default async function (rt, args) {
+  rt.phase("Search");
+  const hits = (await rt.parallel(
+    args.queries.map((q) => () => rt.agent(`SEARCH: ${q}`, { schema: HIT, label: `q:${q}` })),
+  )).filter(Boolean);
+  return { hits, count: hits.length };
+}
+```
+
+### Verify-vote with an **abstain quorum**
+
+A node that fails returns `null`, i.e. it **abstains** — it does not vote "no".
+Count only real verdicts, and require a quorum of *cast* votes so an all-abstain
+finding doesn't silently survive.
+
+```ts
+async function survives(rt, claim) {
+  const votes = (await rt.parallel(
+    [1, 2, 3].map(() => () =>
+      rt.agent(`Try to REFUTE this claim. Default to refuted=true if unsure: ${claim}`, {
+        schema: { type: "object", required: ["refuted"], properties: { refuted: { type: "boolean" } } },
+      })),
+  )).filter(Boolean);                       // drop abstainers (null)
+  if (votes.length < 2) return false;       // quorum: need ≥2 cast votes
+  return votes.filter((v) => !v.refuted).length >= 2;
+}
+```
+
+### Pipeline (no barrier)
+
+```ts
+const out = (await rt.pipeline(
+  items,
+  (item) => rt.agent(`ANALYZE ${item.id}`, { schema: A, label: `analyze:${item.id}` }),
+  (analysis, item) => (analysis ? rt.agent(`SUMMARIZE ${item.id}: ${JSON.stringify(analysis)}`, { schema: S }) : null),
+)).filter(Boolean);
+```
+
+### Loop-until-dry
+
+For unknown-size discovery: keep going until K consecutive rounds find nothing new.
+
+```ts
+const seen = new Set(); const found = []; let dry = 0;
+while (dry < 2) {
+  const round = (await rt.parallel(
+    FINDERS.map((f) => () => rt.agent(f.prompt, { schema: BUG })),
+  )).filter(Boolean);
+  const fresh = round.filter((b) => !seen.has(b.key));
+  if (fresh.length === 0) { dry++; continue; }
+  dry = 0; fresh.forEach((b) => seen.add(b.key)); found.push(...fresh);
+}
+```
+
+---
+
+## The run → journal → fix loop (this is the UX)
+
+```sh
+bun src/cli/omw.ts run my-workflow.ts --agent claude --args '{"q":"…"}'
+```
+
+- **stdout** = the result JSON, one blob. Pipe it, parse it.
+- **journal** = `.omw/<runId>.jsonl`, one event per line. This is where you read
+  *why* a node failed and repair your script.
+- **`--pretty`** = a phase/fan-out tree on **stderr** (never stdout).
+
+### Exit codes
+
+| code | meaning | where the detail is |
+|---|---|---|
+| `0` | run completed (node failures are absorbed by the null-contract) | stdout = result JSON |
+| `1` | **script error** — your JS threw, or syntax/load failure | stderr: `{"error":"script_error"\|"load_failed",…}` |
+| `2` | usage error (bad flags) | stderr: usage line |
+| `3` | adapter CLI not on PATH | stderr: `{"error":"adapter_missing","install_hint":…}` |
+
+Exit `1` means **your script** threw (an `agent()` returning `null` does *not*
+throw — only your own code does). Exit `0` with fewer results than expected means
+nodes failed and were filtered — read the journal.
+
+### Reading a journal
+
+The events are `run_start · phase · agent_start · attempt · agent_end · log ·
+run_end`. A self-repair looks like this (excerpt from a real fake run, `ts`
+fields elided — `search:a` returns invalid JSON, gets re-prompted, recovers):
+
+```jsonl
+{"ev":"agent_start","call":2,"label":"search:a","phase":"Search","adapter":"fake","promptHash":"sha256:…","optsHash":"sha256:…"}
+{"ev":"attempt","call":2,"n":1,"kind":"schema_violation","errors":["/ must have required property 'topic'","/ must have required property 'hits'"],"rawText":"{\"oops\":1}"}
+{"ev":"attempt","call":2,"n":2,"kind":"ok"}
+{"ev":"agent_end","call":2,"ok":true,"result":{"topic":"a","hits":3},"durationMs":0}
+```
+
+A terminal failure carries the **kind** so you know what to fix:
+
+```jsonl
+{"ev":"agent_end","call":3,"ok":false,"kind":"timeout","durationMs":0}
+```
+
+Failure `kind`s on `agent_end`:
+
+- **adapter**: `timeout` · `nonzero_exit` · `spawn_failure` (the CLI itself failed)
+- **gate**: `no_json` · `schema_violation` (the node never produced valid JSON in
+  `maxRetries+1` attempts — `rawText` is journaled so you can see what it said)
+- **`internal_error`**: a bug in omw or your schema (e.g. an invalid JSON Schema
+  that won't compile) — distinct from a flaky node, so you don't misdiagnose.
+
+`omw replay .omw/<runId>.jsonl [--json]` reconstructs the tree / a stats summary
+from a journal. It is honestly a **fixture replay** (reading back what a run
+recorded), **not** a live resume (re-executing from the longest unchanged prefix
+— that's v2; see Scope below).
+
+---
+
+## Conventions (follow these)
+
+1. **Build on the null-contract.** `agent()` returns `null`, never throws.
+   `.filter(Boolean)` after every `parallel`/`pipeline`. For votes, require a
+   quorum of *cast* (non-null) results so all-abstain can't pass.
+2. **Always pass a `schema` when you need structured data.** The gate's
+   self-repair is the one genuine differentiator — use it instead of parsing
+   prose yourself. Keep schemas tight (`required` + types).
+3. **Stay deterministic.** Don't branch the *shape* of the run on `Date.now()` /
+   `Math.random()` / wall-clock. The resume key is `(callIndex, promptHash,
+   optsHash)` (the journaled field is `call`); if a re-run's `agent()` call order shifts, every key shifts and
+   resume (v2) breaks. Vary content by index, not by randomness. (omw can't
+   *enforce* this — no sandbox — so it's a convention you keep.)
+4. **stdout is for the machine.** Return your result; use `rt.log` / `--pretty`
+   for humans. Never `console.log` to stdout from a workflow.
+5. **Ship a `fake` fixture for your example.** Export `const fake` alongside your
+   default export so `--agent fake` runs deterministically with no key. The shape:
+
+   ```ts
+   export const fake = {
+     // Each rule's `match` is a PREDICATE FUNCTION over the prompt (not a string/regex).
+     // `responses` is a cursor that advances per invocation and sticks on the last —
+     // so [invalidJSON, validJSON] models a schema self-repair, and a single
+     // { fail } models a hard failure. A FakeResponse is { text } (a raw JSON
+     // STRING the gate then extracts + validates) or { fail, stderr }.
+     rules: [
+       { match: (p) => p.includes("SCOPE"), responses: [{ text: '{"topics":["a","b"]}' }] },
+       { match: (p) => p.includes("SEARCH a"),
+         responses: [{ text: '{"oops":1}', sessionId: "sa" }, { text: '{"topic":"a","hits":3}' }] }, // self-repair
+       { match: (p) => p.includes("SEARCH b"), responses: [{ fail: "timeout" }] },                    // dropped
+     ],
+     default: { text: "{}" }, // returned when no rule matches — keep it valid so unmatched nodes don't crash
+   };
+   ```
+
+   Common mistake: a top-level `responses` array (instead of `rules`) or a string
+   `match` is silently ignored — every node then returns `default` and the demo
+   degenerates to an empty result. See `examples/deep-research/workflow.ts` for a
+   full working fixture.
+
+---
+
+## Adapters
+
+A node is a coding agent driven through its **headless prompt→result CLI**. Only
+agents that expose such a CLI can be nodes.
+
+| adapter | status | invoke | structured out | in-session follow-up |
+|---|---|---|---|---|
+| **fake** | built-in, free, deterministic | in-process fixtures | as scripted | yes (fixture) |
+| **claude** | **full** (live-verified, claude 2.1.177) | `claude -p <p> --output-format json` | parse `.result` | `--resume` |
+| **codex** | **experimental** (live-verified, codex 0.137.0) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` |
+| **pi** | planned | `pi --print` | stdout | — |
+| **kiro** | **not a fit** | — | — | — |
+
+> The "in-session follow-up" column is the adapter flag the **schema gate** uses to
+> re-prompt a node in the same session — *not* run-level resume. Run-level resume
+> (skipping unchanged nodes across separate runs) is **v2**; see Honest scope below.
+
+- **claude** renames its envelope onto omw's contract (`session_id→sessionId`,
+  `total_cost_usd→costUsd`, `duration_ms→durationMs`; `is_error`/non-success
+  `subtype` → `ok:false`).
+- **codex** is experimental: it has **no cost field** (tokens only, so `costUsd`
+  stays undefined), and its JSONL can include malformed lines under MCP
+  (openai/codex#15451) — omw tolerates them line-by-line and fails *actionably*
+  (surfacing the reason) rather than returning empty. Default sandbox is
+  `workspace-write`.
+- **pi** isn't wired yet (not installed locally → `--agent pi` returns exit 3
+  with an install hint). It's a planned experimental adapter.
+- **kiro is excluded on purpose**: its CLI is a VS-Code-based IDE launcher (open
+  files, diffs, extensions), with no headless prompt→result interface — so it
+  can't be an omw node. The bar for an adapter is a real headless execution CLI.
+
+Missing CLI → exit 3 with `install_hint`. Run `--agent fake` any time for the
+free path.
+
+---
+
+## Honest scope — what omw resembles, and what it doesn't
+
+omw externalizes a pattern Claude Code uses internally for dynamic workflows
+("the model authors a deterministic orchestration script on the fly"). It is a
+**faithful reconstruction of that pattern as OSS**, not a decompiled copy and not
+a first/best/moat claim. Where it lands honestly:
+
+| | who writes the script | where it runs | a node is | agent-agnostic |
+|---|---|---|---|---|
+| Bernstein, pi-builder | a human, ahead of time | external | varies | — |
+| sub-agents-skills | per-turn routing (no standing script) | in-harness | a subagent | no |
+| Claude Code Workflow | the model, on the fly | sealed sandbox | a subagent (one in-harness agent) | no (Claude only) |
+| **oh-my-workflow** | **the model, on the fly (taught by this skill)** | **external** | **a whole coding-agent CLI** | **yes (claude/codex/…)** |
+
+No single shipped project does all three of *(a) host-agent-authored on the fly +
+(b) executed externally via reusable agent CLIs + (c) agent-agnostic*. omw is the
+reference implementation of that **2-of-3 intersection** — plus the schema-gate
+self-repair loop, which is the one piece a "subprocess + for-loop" doesn't have.
+
+### Resemblance ledger (vs the CC dynamic-workflow surface)
+
+**✅ Genuinely the same idea** — model-authored plain-JS orchestration; the
+5-hook shape (`agent`/`pipeline`/`parallel`/`phase`/`log`); `null`-resolution +
+`filter(Boolean)`; schema-forced structured output; a step-by-step journal;
+resume key as a longest-unchanged-prefix model (frozen and **proven byte-stable**
+across re-runs).
+
+> One honest altitude difference even here: a CC Workflow node is a single
+> in-harness subagent; an **omw node is a whole external coding-agent CLI**
+> subprocess. Same orchestration shape, heavier nodes.
+
+**🟡 Designed-but-scoped** —
+- *Live resume*: the key and journal **format are frozen and proven** (identical
+  re-run = 100% key hits; editing the last node = HIT·HIT·…·MISS from the first
+  change), but the runtime cache hook that *skips* re-execution is **v2** (~20
+  lines; `agent_end` gains a `cached:true` field, event set unchanged). So today
+  `omw replay` is fixture replay, not live resume.
+- *Determinism*: CC throws on `Date.now`/`Math.random`; omw treats it as a
+  **convention** (no sandbox). Resume only holds for workflows that keep it.
+
+**❌ Not implemented (CC Workflow has these; omw v1 does not)** — `budget`
+(token-target loops), nested `workflow()` (running another workflow inline), a
+`meta`/`phases` declaration block, `opts.agentType` (custom subagent types),
+`opts.effort`, `run_in_background`, and `isolation: 'worktree'`. Don't write
+scripts that assume these.
+
+---
+
+## Quick reference
+
+- Module: `export default async (rt, args) => result` · optional `export const fake`.
+- Path resolves a directory to `workflow.ts` / `workflow.js` / `index.ts` / `index.js`.
+- `omw run <wf> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--pretty]`
+- `omw replay <journal.jsonl> [--json]`
+- stdout = result JSON · journal = `.omw/<runId>.jsonl` · `--pretty` tree = stderr.
+- `agent()` never throws → `filter(Boolean)`; quorum of cast votes for verify-vote.
