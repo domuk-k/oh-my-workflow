@@ -98,6 +98,23 @@ export type Journal = {
   events(): JournalEvent[];
 };
 
+/** Parse recorded journal JSONL into events, tolerating blank and malformed
+ *  lines (a partially-flushed journal still yields its valid prefix). The single
+ *  reader shared by resume-index build, `omw replay`, and the --pretty tree, so
+ *  those three never disagree about what a journal file means. */
+export function parseJournalLines(lines: string[]): JournalEvent[] {
+  const events: JournalEvent[] = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      events.push(JSON.parse(line) as JournalEvent);
+    } catch {
+      // skip malformed line
+    }
+  }
+  return events;
+}
+
 export function makeJournal(opts?: { sink?: Sink; now?: () => number }): Journal {
   const now = opts?.now ?? (() => Date.now());
   const sink = opts?.sink;

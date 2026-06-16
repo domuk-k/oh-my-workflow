@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { makeJournal, promptHash, optsHash, resumeKey } from "../src/journal";
+import { makeJournal, parseJournalLines, promptHash, optsHash, resumeKey } from "../src/journal";
 
 describe("promptHash", () => {
   test('is "sha256:" + 64 hex chars', () => {
@@ -111,5 +111,18 @@ describe("makeJournal", () => {
       return lines.join("\n");
     };
     expect(run()).toBe(run());
+  });
+});
+
+describe("parseJournalLines", () => {
+  test("parses JSONL events and tolerates blank + malformed lines", () => {
+    const lines = [
+      JSON.stringify({ ev: "run_start", run: "r1", ts: 0 }),
+      "",
+      "not json {",
+      JSON.stringify({ ev: "phase", title: "Search" }),
+    ];
+    const evs = parseJournalLines(lines);
+    expect(evs.map((e) => e.ev)).toEqual(["run_start", "phase"]);
   });
 });

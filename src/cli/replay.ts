@@ -5,6 +5,7 @@
 
 import { readFileSync } from "node:fs";
 import type { Io } from "./run";
+import { parseJournalLines } from "../journal";
 import { renderTree } from "./run";
 
 export type ReplayArgs = { path: string; json: boolean };
@@ -42,14 +43,7 @@ export function summarizeJournal(lines: string[]): ReplaySummary {
   let okCount = 0;
   let failed = 0;
 
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    let e: any;
-    try {
-      e = JSON.parse(line);
-    } catch {
-      continue;
-    }
+  for (const e of parseJournalLines(lines)) {
     switch (e.ev) {
       case "run_start":
         run = e.run;
