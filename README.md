@@ -120,9 +120,14 @@ omw externalizes a pattern Claude Code uses internally for dynamic workflows
   can't stop a workflow from calling `Date.now()`.
 - **resume**: the journal format and resume key `(callIndex, promptHash,
   optsHash)` (journaled as `call`) are **frozen and proven byte-stable** (identical re-run = 100% key
-  hits; edit the last node = hits up to the first change, then a miss). But the
-  runtime hook that *skips* re-execution is **v2**. So `omw replay` is honestly a
-  **fixture replay** (reconstructing a recorded run), not a live resume.
+  hits; edit the last node = hits up to the first change, then a miss). **Live
+  resume has landed**: `omw run <wf> --resume <journal>` skips nodes whose key
+  hits (adapter not invoked, `agent_end{cached:true}`) and re-runs only
+  failed/changed nodes — verified end-to-end on `--agent fake`. It holds **only
+  for deterministic workflows**: omw can't *enforce* determinism (no sandbox), so
+  that stays a convention you keep (enforcement is v2). `omw replay` remains a
+  read-only **fixture replay** (reconstructing a recorded run's view), a separate
+  command — not the resume path.
 - an omw node is a **whole external coding-agent CLI**, heavier than a single
   in-harness subagent.
 - **not in v1** (the CC dynamic-workflow surface has these; omw doesn't yet):

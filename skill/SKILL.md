@@ -252,9 +252,9 @@ Failure `kind`s on `agent_end`:
   that won't compile) — distinct from a flaky node, so you don't misdiagnose.
 
 `omw replay .omw/<runId>.jsonl [--json]` reconstructs the tree / a stats summary
-from a journal. It is honestly a **fixture replay** (reading back what a run
-recorded), **not** a live resume (re-executing from the longest unchanged prefix
-— that's v2; see Scope below).
+from a journal — a read-only **fixture replay** (reading back what a run
+recorded). For *live* resume (re-executing from the longest unchanged prefix,
+skipping cached nodes), use `omw run <wf> --resume <journal>` — see Scope below.
 
 ---
 
@@ -269,8 +269,8 @@ recorded), **not** a live resume (re-executing from the longest unchanged prefix
 3. **Stay deterministic.** Don't branch the *shape* of the run on `Date.now()` /
    `Math.random()` / wall-clock. The resume key is `(callIndex, promptHash,
    optsHash)` (the journaled field is `call`); if a re-run's `agent()` call order shifts, every key shifts and
-   resume (v2) breaks. Vary content by index, not by randomness. (omw can't
-   *enforce* this — no sandbox — so it's a convention you keep.)
+   resume breaks. Vary content by index, not by randomness. (omw can't *enforce*
+   this — no sandbox — so it's a convention you keep; enforcement is v2.)
 4. **stdout is for the machine.** Return your result; use `rt.log` / `--pretty`
    for humans. Never `console.log` to stdout from a workflow.
 5. **Ship a `fake` fixture for your example.** Export `const fake` alongside your
@@ -361,20 +361,18 @@ self-repair loop, which is the one piece a "subprocess + for-loop" doesn't have.
 5-hook shape (`agent`/`pipeline`/`parallel`/`phase`/`log`); `null`-resolution +
 `filter(Boolean)`; schema-forced structured output; a step-by-step journal;
 resume key as a longest-unchanged-prefix model (frozen and **proven byte-stable**
-across re-runs).
+across re-runs); **live resume** via `omw run --resume <journal>` (cached nodes
+skip the adapter — `agent_end{cached:true}` — and only failed/changed nodes
+re-run; verified end-to-end on `--agent fake`).
 
 > One honest altitude difference even here: a CC Workflow node is a single
 > in-harness subagent; an **omw node is a whole external coding-agent CLI**
 > subprocess. Same orchestration shape, heavier nodes.
 
 **🟡 Designed-but-scoped** —
-- *Live resume*: the key and journal **format are frozen and proven** (identical
-  re-run = 100% key hits; editing the last node = HIT·HIT·…·MISS from the first
-  change), but the runtime cache hook that *skips* re-execution is **v2** (~20
-  lines; `agent_end` gains a `cached:true` field, event set unchanged). So today
-  `omw replay` is fixture replay, not live resume.
-- *Determinism*: CC throws on `Date.now`/`Math.random`; omw treats it as a
-  **convention** (no sandbox). Resume only holds for workflows that keep it.
+- *Determinism enforcement*: CC throws on `Date.now`/`Math.random`; omw treats it
+  as a **convention** (no sandbox), so live resume holds **only for workflows that
+  keep it**. A guard that *enforces* it in resume mode is v2.
 
 **❌ Not implemented (CC Workflow has these; omw v1 does not)** — `budget`
 (token-target loops), nested `workflow()` (running another workflow inline), a
@@ -388,7 +386,7 @@ scripts that assume these.
 
 - Module: `export default async (rt, args) => result` · optional `export const fake`.
 - Path resolves a directory to `workflow.ts` / `workflow.js` / `index.ts` / `index.js`.
-- `omw run <wf> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--pretty]`
+- `omw run <wf> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--resume <journal.jsonl>] [--pretty]`
 - `omw replay <journal.jsonl> [--json]`
 - stdout = result JSON · journal = `.omw/<runId>.jsonl` · `--pretty` tree = stderr.
 - `agent()` never throws → `filter(Boolean)`; quorum of cast votes for verify-vote.
