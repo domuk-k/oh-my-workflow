@@ -1,51 +1,160 @@
 # oh-my-workflow
 
-> Run the coding-agent CLIs you already have — `claude -p`, `codex exec`, `pi --print` —
-> as nodes in a plain-JS workflow your host agent writes. omw is the thin
-> deterministic glue: it runs the script, schema-gates each node's output, and
-> journals every step so the agent can read its own failure and repair its own script.
+> Run the coding-agent CLIs you already have — `claude -p`, `codex exec` — as
+> nodes in a plain-JS workflow your host agent writes. omw is the thin glue: it
+> runs the script, schema-gates each node's output, and journals every step so the
+> agent can read its own failure and repair its own script. (What's
+> "deterministic" is scoped honestly below — the engine and `--agent fake`, not
+> your script.)
 
-**Status: early WIP (2026-06-14).** The runtime core is built and green; it is not
-yet a runnable CLI. This repo currently ships the engine + its test spine, not a
-launch. The launch positioning, full docs, and `--agent fake` CLI are tracked in
-the handoff (see below) — do not treat anything here as finished marketing copy.
+## Try it now — free, no API key
 
-## What's here today
+```sh
+git clone <repo-url> && cd oh-my-workflow   # repo not yet public; fill in the URL
+bun install
+bun src/cli/omw.ts run examples/deep-research --agent fake
+```
 
-The load-bearing core, built TDD-first, `bun test` green:
+```json
+{"confirmed":[{"topic":"a","hits":3,"verified":true},{"topic":"c","hits":5,"verified":true}],"summary":{"summary":"done","count":2}}
+```
 
-| Module | Role |
-|---|---|
-| `src/runtime.ts` | `makeRuntime` — the 5 hooks (`agent`/`pipeline`/`parallel`/`phase`/`log`), the null-contract, the concurrency limiter |
-| `src/schema-gate.ts` | deterministic JSON extraction → ajv validate → ≤2 retries → `null` (never throws) |
-| `src/journal.ts` | JSONL event log + stable resume keys `(callIndex, promptHash, optsHash)` |
-| `src/adapters/types.ts` | the `AgentPort` contract every adapter implements |
-| `src/adapters/fake.ts` | the deterministic fake adapter (test double **and** the future `--agent fake` demo) |
+That's the whole spine in one pass — a `--pretty` tree shows it:
 
-**The null-contract** is the invariant everything stands on: `agent()` never throws;
-a terminal failure resolves to `null` and a journal entry carrying the failure
-`kind` (+ `stderr`/`rawText` so the authoring agent can self-repair).
+```sh
+bun src/cli/omw.ts run examples/deep-research --agent fake --pretty
+```
 
-## Run the tests
+```
+run r-… (examples/deep-research)
+  ▸ Scope
+    • call#1 [fake]
+      ✓ call#1
+  ▸ Search
+    • search:a [fake]
+    • search:b [fake]
+    • search:c [fake]
+      ✗ timeout call#3
+      ✓ call#4
+      ✓ call#2
+  ▸ Verify
+    • call#5 [fake]
+    • call#6 [fake]
+      ✓ call#5
+      ✓ call#6
+  ▸ Synthesize
+    • call#7 [fake]
+      ✓ call#7
+run_end ok=true · 6 ok / 1 failed
+```
+
+`search:a` (call#2) returns invalid JSON first and self-repairs to `✓`; `search:b`
+(call#3) times out and is dropped by `filter(Boolean)` — the run still ends green.
+
+`--agent fake` is a built-in deterministic adapter — no API key, no network. A
+stranger runs the full fan-out + pipeline + a scripted schema-fail→self-repair +
+a scripted timeout→drop, and gets a stable result JSON. Swap `--agent claude`
+(after `claude login`) to run it for real.
+
+> Once published this is `bunx oh-my-workflow run …`. It isn't on npm yet, so
+> today run the bin directly from a clone as shown above.
+
+## What it is
+
+You write a plain-JS orchestration script. Its nodes are **whole coding agents**
+(`claude -p`, `codex exec`) — not single LLM calls. The runtime hands your script
+**five hooks** and nothing else:
+
+```ts
+export default async function (rt, args) {
+  rt.phase("Search");
+  const hits = (await rt.parallel(
+    args.queries.map((q) => () => rt.agent(`SEARCH: ${q}`, { schema: HIT, label: q })),
+  )).filter(Boolean);                 // agent() returns null on failure, never throws
+  return { hits, count: hits.length };
+}
+```
+
+- `rt.agent(prompt, opts?)` — run one coding-agent CLI node. With a `schema`, omw
+  extracts JSON, validates it (ajv), and **re-prompts the node with the
+  validation errors** up to 2 times before giving up. Returns the validated
+  object, or `null`. **Never throws** — the load-bearing *null-contract*.
+- `rt.parallel(thunks)` — concurrent, barrier; failures become `null`.
+- `rt.pipeline(items, …stages)` — each item flows through all stages independently.
+- `rt.phase(title)` / `rt.log(msg)` — journal / `--pretty` side-channel only.
+
+Concurrency is bounded at the `agent()` boundary (default 4, `--concurrency N`).
+Every step is recorded to the journal file `.omw/<runId>.jsonl`, so when a node
+fails you read the `kind` (`timeout` / `nonzero_exit` / `schema_violation` / …)
+and fix your script. stdout is one result JSON; the `--pretty` tree and a
+`journal: <path>` pointer go to stderr.
+
+**The full agent-facing guide is [`skill/SKILL.md`](skill/SKILL.md)** — patterns
+(fan-out / verify-vote / pipeline / loop-until-dry), the debug loop, and the
+conventions. That skill is the primary product; this README is the human intro.
+
+## Adapters
+
+A node is a coding agent driven through its headless prompt→result CLI.
+
+| adapter | status | notes |
+|---|---|---|
+| **fake** | built-in, free, deterministic | the no-key demo engine and test double |
+| **claude** | **full** (live-verified, 2.1.177) | `claude -p --output-format json`; `--resume` powers in-session schema self-repair |
+| **codex** | **experimental** (live-verified, 0.137.0) | `codex exec --json`; **no cost field**; tolerates malformed JSONL ([openai/codex#15451](https://github.com/openai/codex/issues/15451)) and fails *actionably* |
+| **pi** | planned | not wired yet (`--agent pi` → exit 3 + install hint) |
+| **kiro** | not a fit | its CLI is an IDE launcher (open files/diffs), no headless prompt→result interface |
+
+A missing CLI exits `3` with an `install_hint` instead of failing mid-run.
+
+## Honest scope (read before you judge the novelty)
+
+omw externalizes a pattern Claude Code uses internally for dynamic workflows
+("the model authors a deterministic orchestration script on the fly"). It is a
+**faithful reconstruction of that pattern as OSS** — not a decompiled copy, and
+**no claim of first / best / moat**.
+
+- **"deterministic"** means: the engine's guarantees (stable resume keys, JSONL
+  recording, schema-gate) **and** the `--agent fake` demo. Your *script's*
+  determinism is a **convention you keep** — there is **no sandbox**, so omw
+  can't stop a workflow from calling `Date.now()`.
+- **resume**: the journal format and resume key `(callIndex, promptHash,
+  optsHash)` (journaled as `call`) are **frozen and proven byte-stable** (identical re-run = 100% key
+  hits; edit the last node = hits up to the first change, then a miss). But the
+  runtime hook that *skips* re-execution is **v2**. So `omw replay` is honestly a
+  **fixture replay** (reconstructing a recorded run), not a live resume.
+- an omw node is a **whole external coding-agent CLI**, heavier than a single
+  in-harness subagent.
+- **not in v1** (the CC dynamic-workflow surface has these; omw doesn't yet):
+  `budget`, nested `workflow()`, a `meta`/`phases` block, custom `agentType`,
+  `run_in_background`, worktree isolation.
+
+The one genuinely novel piece of code is the **schema-gate self-repair loop** —
+the part a "subprocess + for-loop" comparison misses. Everything else is honest
+glue. The fuller positioning (4-way prior-art table, resemblance ledger) lives in
+[`skill/SKILL.md`](skill/SKILL.md) and the
+[launch strategy](docs/specs/2026-06-14-omw-launch-strategy.md).
+
+## Develop
 
 ```sh
 bun install
-bun test            # 66 tests, the full 5-hook spine + self-repair cycle
-bun test --coverage # ~99% lines; runtime/journal/fake at 100%
+bun test            # 105 pass / 2 skip (live adapters, OMW_LIVE=1) / 0 fail
+bun test --coverage # ~99% lines on the pure core
 bun run typecheck   # tsc --noEmit, clean
 ```
 
-The gate test (`test/spine.test.ts`) runs one full `scope → search → verify →
-synthesize` pass against the fake adapter, including a scripted
-schema-fail → self-repair → `filter(Boolean)` survival cycle. Green here = the
-walking skeleton exists. It is also exactly the `--agent fake` hero demo, once the
-CLI runner lands.
+`test/spine.test.ts` is the gate: one full `scope → search → verify → synthesize`
+pass against the fake adapter, including the scripted schema-fail → self-repair →
+`filter(Boolean)` survival cycle. Live adapter tests run only under `OMW_LIVE=1`
+(they spend real tokens) and are skipped by default.
 
-## Design & strategy
+## Docs
 
+- **Skill (primary product)**: [`skill/SKILL.md`](skill/SKILL.md)
 - Product spec: [`docs/specs/2026-06-12-oh-my-workflow-design.md`](docs/specs/2026-06-12-oh-my-workflow-design.md)
-- Launch strategy + evaluation scorecard: [`docs/specs/2026-06-14-omw-launch-strategy.md`](docs/specs/2026-06-14-omw-launch-strategy.md)
-- Next steps (MVP → launch): [`docs/specs/2026-06-14-handoff.md`](docs/specs/2026-06-14-handoff.md)
+- Launch strategy + scorecard: [`docs/specs/2026-06-14-omw-launch-strategy.md`](docs/specs/2026-06-14-omw-launch-strategy.md)
+- Resume / determinism internals: [`docs/specs/2026-06-15-resume-internals-deepdive.md`](docs/specs/2026-06-15-resume-internals-deepdive.md)
 
 ## License
 
