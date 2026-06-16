@@ -9,6 +9,7 @@
 import type { AgentPort, AgentResult } from "./adapters/types";
 import type { Journal } from "./journal";
 import { promptHash, optsHash } from "./journal";
+import type { ResumeIndex } from "./resume";
 import { schemaGate, makeValidator, type GateCall, type GateFeedback } from "./schema-gate";
 
 export type AgentOpts = {
@@ -72,8 +73,13 @@ export function makeRuntime(deps: {
   adapter: AgentPort;
   journal: Journal;
   concurrency?: number;
+  /** A prior run's journal as a lookup. When a node's (call, promptHash,
+   *  optsHash) key hits, the adapter is skipped and the cached result returned —
+   *  the longest-unchanged-prefix resume model. A miss (incl. a prior failure)
+   *  runs live, so resume only re-executes failed/changed nodes. */
+  resume?: ResumeIndex;
 }): Runtime {
-  const { adapter, journal } = deps;
+  const { adapter, journal, resume } = deps;
   const limit = makeLimiter(deps.concurrency ?? 4);
   let callCounter = 0;
   let currentPhase: string | undefined;
@@ -81,14 +87,26 @@ export function makeRuntime(deps: {
   async function agent(prompt: string, opts: AgentOpts = {}): Promise<unknown | null> {
     const call = ++callCounter;
     const phase = opts.phase ?? currentPhase;
+    const pHash = promptHash(prompt);
+    const oHash = optsHash(opts);
     journal.agentStart({
       call,
       label: opts.label,
       phase,
       adapter: adapter.name,
-      promptHash: promptHash(prompt),
-      optsHash: optsHash(opts),
+      promptHash: pHash,
+      optsHash: oHash,
     });
+
+    // Resume short-circuit: a hit skips the limiter + adapter entirely, but still
+    // emits agent_end so every start has a matching end (the spine invariant).
+    if (resume) {
+      const hit = resume.lookup({ call, promptHash: pHash, optsHash: oHash });
+      if (hit.found) {
+        journal.agentEnd({ call, ok: true, result: hit.value, durationMs: 0, cached: true });
+        return hit.value;
+      }
+    }
 
     return limit(async () => {
       let durationMs = 0;

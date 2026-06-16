@@ -2,7 +2,22 @@ import { test, expect, describe } from "bun:test";
 import { makeRuntime } from "../src/runtime";
 import { makeJournal, type JournalEvent } from "../src/journal";
 import { makeFakeAdapter } from "../src/adapters/fake";
-import type { AgentPort } from "../src/adapters/types";
+import { makeResumeIndex } from "../src/resume";
+import type { AgentPort, AgentResult } from "../src/adapters/types";
+
+/** A fake adapter that counts invocations, so a resume cached-hit is provable by
+ *  the adapter NOT being called. Each call returns a distinct value. */
+function countingAdapter(): AgentPort & { calls: () => number } {
+  let calls = 0;
+  return {
+    name: "counting",
+    calls: () => calls,
+    async invoke(): Promise<AgentResult> {
+      calls++;
+      return { ok: true, text: `{"n":${calls}}`, meta: { durationMs: 1 } };
+    },
+  };
+}
 
 const numSchema = {
   type: "object",
@@ -181,5 +196,135 @@ describe("runtime concurrency limiter", () => {
     await rt.parallel(Array.from({ length: 20 }, () => () => rt.agent("x", { schema: numSchema })));
     expect(max).toBeLessThanOrEqual(4);
     expect(max).toBeGreaterThan(1);
+  });
+});
+
+describe("runtime.agent — resume (longest-unchanged-prefix cache)", () => {
+  test("identical re-run is a cached hit: adapter NOT invoked, prior value returned", async () => {
+    // First run records a journal.
+    const j1 = makeJournal({ now: () => 0 });
+    const a1 = countingAdapter();
+    const rt1 = makeRuntime({ adapter: a1, journal: j1 });
+    const first = await rt1.agent("compute", { schema: numSchema });
+    expect(first).toEqual({ n: 1 });
+    expect(a1.calls()).toBe(1);
+
+    // Second run resumes from the first run's journal.
+    const j2 = makeJournal({ now: () => 0 });
+    const a2 = countingAdapter();
+    const resume = makeResumeIndex(j1.events());
+    const rt2 = makeRuntime({ adapter: a2, journal: j2, resume });
+    const second = await rt2.agent("compute", { schema: numSchema });
+
+    expect(second).toEqual({ n: 1 }); // the cached value, not a fresh {n:1} from a2
+    expect(a2.calls()).toBe(0); // adapter skipped entirely on the hit
+    const end = j2.events().find((e) => e.ev === "agent_end") as Extract<JournalEvent, { ev: "agent_end" }>;
+    expect(end.ok).toBe(true);
+    expect(end.cached).toBe(true);
+  });
+});
+
+describe("runtime.agent — resume partial-failure recompute", () => {
+  test("a prior failed node re-runs live while prior ok nodes stay cached", async () => {
+    // Run 1: node A succeeds with a distinctive value; node B fails (timeout).
+    const j1 = makeJournal({ now: () => 0 });
+    const a1 = makeFakeAdapter({
+      rules: [
+        { match: (p) => p.includes("NODE A"), responses: [{ text: '{"n":42}' }] },
+        { match: (p) => p.includes("NODE B"), responses: [{ fail: "timeout" }] },
+      ],
+    });
+    const rt1 = makeRuntime({ adapter: a1, journal: j1 });
+    const a1res = await rt1.agent("NODE A", { schema: numSchema });
+    const b1res = await rt1.agent("NODE B", { schema: numSchema });
+    expect(a1res).toEqual({ n: 42 });
+    expect(b1res).toBeNull();
+
+    // Run 2: resume from j1. A is cached (skip adapter); B missed the index
+    // (it failed), so it re-runs live — and now succeeds.
+    const j2 = makeJournal({ now: () => 0 });
+    const a2 = countingAdapter(); // returns {n:1} on its single live call (B)
+    const resume = makeResumeIndex(j1.events());
+    const rt2 = makeRuntime({ adapter: a2, journal: j2, resume });
+    const a2res = await rt2.agent("NODE A", { schema: numSchema });
+    const b2res = await rt2.agent("NODE B", { schema: numSchema });
+
+    expect(a2res).toEqual({ n: 42 }); // cached from run 1, NOT re-run
+    expect(b2res).toEqual({ n: 1 }); // re-run live on resume
+    expect(a2.calls()).toBe(1); // adapter invoked only for B
+
+    const ends = j2.events().filter((e) => e.ev === "agent_end") as Extract<JournalEvent, { ev: "agent_end" }>[];
+    expect(ends.map((e) => e.cached ?? false)).toEqual([true, false]); // A cached, B live
+  });
+});
+
+describe("runtime.agent — resume full-prefix cache (parallel fan-out)", () => {
+  // A miniature deep-research shape: a scope node, a parallel fan-out, a synth.
+  async function miniWorkflow(rt: ReturnType<typeof makeRuntime>) {
+    rt.phase("Scope");
+    const scope = (await rt.agent("SCOPE", { schema: numSchema })) as { n: number };
+    rt.phase("Search");
+    const hits = await rt.parallel(
+      ["a", "b", "c"].map((t) => () => rt.agent(`SEARCH ${t}`, { schema: numSchema, label: `search:${t}` })),
+    );
+    rt.phase("Synth");
+    const synth = await rt.agent("SYNTH", { schema: numSchema });
+    return { scope, hits, synth };
+  }
+
+  function miniAdapter() {
+    return makeFakeAdapter({
+      rules: [
+        { match: (p) => p.includes("SCOPE"), responses: [{ text: '{"n":1}' }] },
+        { match: (p) => p.includes("SEARCH a"), responses: [{ text: '{"n":2}' }] },
+        { match: (p) => p.includes("SEARCH b"), responses: [{ text: '{"n":3}' }] },
+        { match: (p) => p.includes("SEARCH c"), responses: [{ text: '{"n":4}' }] },
+        { match: (p) => p.includes("SYNTH"), responses: [{ text: '{"n":5}' }] },
+      ],
+    });
+  }
+
+  test("identical re-run: 100% cache hits, zero adapter calls, byte-identical result", async () => {
+    const j1 = makeJournal({ now: () => 0 });
+    const r1 = await miniWorkflow(makeRuntime({ adapter: miniAdapter(), journal: j1 }));
+
+    const j2 = makeJournal({ now: () => 0 });
+    const a2 = countingAdapter();
+    const resume = makeResumeIndex(j1.events());
+    const r2 = await miniWorkflow(makeRuntime({ adapter: a2, journal: j2, resume }));
+
+    expect(a2.calls()).toBe(0); // every node served from the index
+    expect(JSON.stringify(r2)).toBe(JSON.stringify(r1)); // byte-identical
+
+    // every agent_start has a matching cached agent_end (spine invariant)
+    const starts = j2.events().filter((e) => e.ev === "agent_start") as Extract<JournalEvent, { ev: "agent_start" }>[];
+    const ends = j2.events().filter((e) => e.ev === "agent_end") as Extract<JournalEvent, { ev: "agent_end" }>[];
+    expect(starts.length).toBe(5);
+    expect(ends.length).toBe(5);
+    expect(ends.every((e) => e.cached === true && e.ok === true)).toBe(true);
+    expect(new Set(ends.map((e) => e.call))).toEqual(new Set(starts.map((e) => e.call)));
+  });
+
+  test("editing the last node: prefix stays cached, only the edited node runs live", async () => {
+    const j1 = makeJournal({ now: () => 0 });
+    await miniWorkflow(makeRuntime({ adapter: miniAdapter(), journal: j1 }));
+
+    const j2 = makeJournal({ now: () => 0 });
+    const a2 = countingAdapter();
+    const resume = makeResumeIndex(j1.events());
+    const rt2 = makeRuntime({ adapter: a2, journal: j2, resume });
+
+    // Replay the prefix verbatim, then change the final node's prompt.
+    rt2.phase("Scope");
+    await rt2.agent("SCOPE", { schema: numSchema });
+    rt2.phase("Search");
+    await rt2.parallel(["a", "b", "c"].map((t) => () => rt2.agent(`SEARCH ${t}`, { schema: numSchema, label: `search:${t}` })));
+    rt2.phase("Synth");
+    const synth = await rt2.agent("SYNTH v2 — EDITED", { schema: numSchema });
+
+    expect(a2.calls()).toBe(1); // only the edited SYNTH node ran live
+    expect(synth).toEqual({ n: 1 }); // fresh value from a2, not the cached {n:5}
+    const ends = j2.events().filter((e) => e.ev === "agent_end") as Extract<JournalEvent, { ev: "agent_end" }>[];
+    expect(ends.map((e) => e.cached ?? false)).toEqual([true, true, true, true, false]);
   });
 });
