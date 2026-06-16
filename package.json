@@ -3,6 +3,18 @@
   "version": "0.0.1",
   "description": "Run coding-agent CLIs (claude -p / codex exec / pi) as nodes in a plain-JS workflow. The thin deterministic glue.",
   "type": "module",
+  "files": [
+    "src",
+    "examples",
+    "skill",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/domuk-k/oh-my-workflow.git"
+  },
+  "homepage": "https://github.com/domuk-k/oh-my-workflow#readme",
   "bin": {
     "omw": "./src/cli/omw.ts"
   },
