@@ -2,8 +2,9 @@
 // Parsing is a pure function so the input contract is testable without touching
 // the filesystem, a clock, or a subprocess.
 
-import { appendFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AgentPort } from "../adapters/types";
 import { makeFakeAdapter, type FakeAdapterOptions } from "../adapters/fake";
 import { makeClaudeAdapter } from "../adapters/claude";
@@ -51,9 +52,15 @@ export function parseRunArgs(argv: string[]): ParseResult {
         }
         break;
       }
-      case "--concurrency":
-        concurrency = Number(argv[++i]);
+      case "--concurrency": {
+        const raw = argv[++i];
+        const n = Number(raw);
+        if (raw === undefined || !Number.isInteger(n) || n < 1) {
+          return { ok: false, error: `--concurrency must be a positive integer, got: ${raw}` };
+        }
+        concurrency = n;
         break;
+      }
       case "--pretty":
         pretty = true;
         break;
@@ -91,11 +98,32 @@ export type AdapterResolution =
 /** Entry filenames tried, in order, when a workflow path is a directory. */
 const ENTRY_NAMES = ["workflow.ts", "workflow.js", "index.ts", "index.js"];
 
+/** Package root, so bundled paths (e.g. `examples/…`) resolve when omw is
+ *  installed and invoked from an arbitrary cwd, not only from inside a clone. */
+const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+/** Resolve a workflow path: an absolute path as-is; otherwise cwd-relative
+ *  (the user's own workflows) first, then package-relative as a fallback so the
+ *  shipped `examples/…` demo runs post-install. The cwd path is kept for the
+ *  not-found error so the message points where the user actually looked. */
+export function resolveWorkflowPath(wfPath: string): string {
+  if (isAbsolute(wfPath)) return wfPath;
+  const fromCwd = resolve(process.cwd(), wfPath);
+  if (existsSync(fromCwd)) return fromCwd;
+  // Fall back to the package-bundled demo ONLY for the `examples/` namespace, so
+  // a user's mistyped workflow path can't silently resolve to a shipped file.
+  if (wfPath === "examples" || wfPath.startsWith("examples/")) {
+    const fromPkg = resolve(PKG_ROOT, wfPath);
+    if (existsSync(fromPkg)) return fromPkg;
+  }
+  return fromCwd;
+}
+
 /** Load a workflow module from a file path or a directory (resolved to its
  *  conventional entry). The default export is the orchestration fn; a missing
  *  default is an authoring bug surfaced as a load error, not a silent no-op. */
 export async function loadWorkflow(wfPath: string): Promise<LoadedWorkflow> {
-  const abs = isAbsolute(wfPath) ? wfPath : resolve(process.cwd(), wfPath);
+  const abs = resolveWorkflowPath(wfPath);
   let entry = abs;
   let isDir = false;
   try {
@@ -263,7 +291,6 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   const omwDir = io.omwDir ?? ".omw";
   const runId = (io.runId ?? defaultRunId)();
   const journalPath = join(omwDir, `${runId}.jsonl`);
-  mkdirSync(omwDir, { recursive: true });
 
   // Resume: load the prior journal into an index. A read failure is exit 1 (an
   // unreadable --resume path is a user error, not a reason to silently run live).
@@ -291,6 +318,9 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
     resolveAdapter,
     journalSink: (line) => {
       events.push(line);
+      // Create .omw/ lazily on the first journal line, so a failed load/adapter
+      // resolution (which records nothing) doesn't litter an empty directory.
+      if (events.length === 1) mkdirSync(omwDir, { recursive: true });
       appendFileSync(journalPath, line + "\n");
     },
     now: () => Date.now(),
