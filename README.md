@@ -56,8 +56,9 @@ stranger runs the full fan-out + pipeline + a scripted schema-fail→self-repair
 a scripted timeout→drop, and gets a stable result JSON. Swap `--agent claude`
 (after `claude login`) to run it for real.
 
-> Once published this is `bunx oh-my-workflow run …`. It isn't on npm yet, so
-> today run the bin directly from a clone as shown above.
+> Once on npm this is `bunx oh-my-workflow run examples/deep-research --agent fake`
+> — the example ships inside the package and resolves from there, so it runs from
+> any directory. omw runs under **bun**; `npx` (Node) won't execute the TS bin.
 
 ## What it is
 
@@ -149,13 +150,13 @@ The one genuinely novel piece of code is the **schema-gate self-repair loop** �
 the part a "subprocess + for-loop" comparison misses. Everything else is honest
 glue. The fuller positioning (4-way prior-art table, resemblance ledger) lives in
 [`skill/SKILL.md`](skill/SKILL.md) and the
-[launch strategy](docs/specs/2026-06-14-omw-launch-strategy.md).
+[launch strategy](https://github.com/domuk-k/oh-my-workflow/blob/main/docs/specs/2026-06-14-omw-launch-strategy.md).
 
 ## Develop
 
 ```sh
 bun install
-bun test            # 105 pass / 2 skip (live adapters, OMW_LIVE=1) / 0 fail
+bun test            # 136 pass / 2 skip (live adapters, OMW_LIVE=1) / 0 fail
 bun test --coverage # ~99% lines on the pure core
 bun run typecheck   # tsc --noEmit, clean
 ```
@@ -168,9 +169,9 @@ pass against the fake adapter, including the scripted schema-fail → self-repai
 ## Docs
 
 - **Skill (primary product)**: [`skill/SKILL.md`](skill/SKILL.md)
-- Product spec: [`docs/specs/2026-06-12-oh-my-workflow-design.md`](docs/specs/2026-06-12-oh-my-workflow-design.md)
-- Launch strategy + scorecard: [`docs/specs/2026-06-14-omw-launch-strategy.md`](docs/specs/2026-06-14-omw-launch-strategy.md)
-- Resume / determinism internals: [`docs/specs/2026-06-15-resume-internals-deepdive.md`](docs/specs/2026-06-15-resume-internals-deepdive.md)
+- Product spec: [`docs/specs/2026-06-12-oh-my-workflow-design.md`](https://github.com/domuk-k/oh-my-workflow/blob/main/docs/specs/2026-06-12-oh-my-workflow-design.md)
+- Launch strategy + scorecard: [`docs/specs/2026-06-14-omw-launch-strategy.md`](https://github.com/domuk-k/oh-my-workflow/blob/main/docs/specs/2026-06-14-omw-launch-strategy.md)
+- Resume / determinism internals: [`docs/specs/2026-06-15-resume-internals-deepdive.md`](https://github.com/domuk-k/oh-my-workflow/blob/main/docs/specs/2026-06-15-resume-internals-deepdive.md)
 
 ## License
 
