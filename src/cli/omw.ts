@@ -22,7 +22,7 @@ async function main(argv: string[]): Promise<number> {
       io.stderr(
         "usage: omw <command>\n\n" +
           "commands:\n" +
-          "  run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--pretty]\n" +
+          "  run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--resume <journal.jsonl>] [--pretty]\n" +
           "  replay <journal.jsonl> [--json]\n\n" +
           "free demo (no API key):  omw run examples/deep-research --agent fake\n",
       );

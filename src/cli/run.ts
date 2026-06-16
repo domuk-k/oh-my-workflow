@@ -2,7 +2,7 @@
 // Parsing is a pure function so the input contract is testable without touching
 // the filesystem, a clock, or a subprocess.
 
-import { appendFileSync, mkdirSync, statSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import type { AgentPort } from "../adapters/types";
 import { makeFakeAdapter, type FakeAdapterOptions } from "../adapters/fake";
@@ -11,6 +11,8 @@ import { makeCodexAdapter } from "../adapters/codex";
 import type { Runtime } from "../runtime";
 import { makeRuntime } from "../runtime";
 import { makeJournal } from "../journal";
+import type { ResumeIndex } from "../resume";
+import { makeResumeIndexFromLines } from "../resume";
 
 export type RunOptions = {
   wfPath: string;
@@ -18,6 +20,8 @@ export type RunOptions = {
   args: unknown;
   concurrency?: number;
   pretty: boolean;
+  /** Path to a prior run's journal to resume from (longest-unchanged-prefix). */
+  resume?: string;
 };
 
 export type ParseResult =
@@ -30,6 +34,7 @@ export function parseRunArgs(argv: string[]): ParseResult {
   let args: unknown;
   let concurrency: number | undefined;
   let pretty = false;
+  let resume: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const tok = argv[i]!;
@@ -52,6 +57,9 @@ export function parseRunArgs(argv: string[]): ParseResult {
       case "--pretty":
         pretty = true;
         break;
+      case "--resume":
+        resume = argv[++i];
+        break;
       default:
         if (wfPath === undefined) wfPath = tok;
         else return { ok: false, error: `unexpected argument: ${tok}` };
@@ -61,7 +69,7 @@ export function parseRunArgs(argv: string[]): ParseResult {
   if (wfPath === undefined) return { ok: false, error: "missing workflow path" };
   if (agent === undefined) return { ok: false, error: "missing --agent <name>" };
 
-  return { ok: true, value: { wfPath, agent, args, concurrency, pretty } };
+  return { ok: true, value: { wfPath, agent, args, concurrency, pretty, resume } };
 }
 
 // ── workflow execution ──────────────────────────────────────────────────────
@@ -119,6 +127,10 @@ export type RunDeps = {
   journalSink: (line: string) => void;
   now: () => number;
   runId: () => string;
+  /** A prior run's journal as a lookup; when present, nodes whose key hits are
+   *  served from it and the adapter is skipped. Built by runCommand from the
+   *  --resume file so runWorkflow stays fs-free. */
+  resume?: ResumeIndex;
   /** Optional human-facing tree (--pretty). Pure side-channel; never stdout. */
   stderr?: (line: string) => void;
 };
@@ -151,7 +163,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
 
   const runId = deps.runId();
   const journal = makeJournal({ sink: deps.journalSink, now: deps.now });
-  const rt = makeRuntime({ adapter: resolved.adapter, journal, concurrency: opts.concurrency });
+  const rt = makeRuntime({ adapter: resolved.adapter, journal, concurrency: opts.concurrency, resume: deps.resume });
 
   journal.runStart({ run: runId, wf: opts.wfPath });
   try {
@@ -222,7 +234,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   if (!parsed.ok) {
     io.stderr(JSON.stringify({ error: "usage", message: parsed.error }));
     io.stderr(
-      "\nusage: omw run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--pretty]",
+      "\nusage: omw run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--resume <journal.jsonl>] [--pretty]",
     );
     return 2;
   }
@@ -231,6 +243,18 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   const runId = (io.runId ?? defaultRunId)();
   const journalPath = join(omwDir, `${runId}.jsonl`);
   mkdirSync(omwDir, { recursive: true });
+
+  // Resume: load the prior journal into an index. A read failure is exit 1 (an
+  // unreadable --resume path is a user error, not a reason to silently run live).
+  let resume: ResumeIndex | undefined;
+  if (parsed.value.resume) {
+    try {
+      resume = makeResumeIndexFromLines(readFileSync(parsed.value.resume, "utf8").split("\n"));
+    } catch {
+      io.stderr(JSON.stringify({ error: "resume_read_failed", path: parsed.value.resume }) + "\n");
+      return 1;
+    }
+  }
 
   const events: string[] = [];
   const outcome = await runWorkflow(parsed.value, {
@@ -242,6 +266,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
     },
     now: () => Date.now(),
     runId: () => runId,
+    resume,
   });
 
   if (outcome.exitCode === 0 && outcome.stdout !== undefined) {

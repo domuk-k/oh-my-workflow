@@ -4,6 +4,7 @@
 import { test, expect, describe } from "bun:test";
 import { parseRunArgs, runWorkflow, resolveAdapter } from "../src/cli/run";
 import { makeFakeAdapter } from "../src/adapters/fake";
+import { makeResumeIndexFromLines } from "../src/resume";
 
 describe("resolveAdapter", () => {
   test("fake is always available", () => {
@@ -60,6 +61,13 @@ describe("parseRunArgs", () => {
       concurrency: 8,
       pretty: true,
     });
+  });
+
+  test("parses --resume <journal> into RunOptions.resume", () => {
+    const r = parseRunArgs(["w", "--agent", "fake", "--resume", ".omw/r-1.jsonl"]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.value.resume).toBe(".omw/r-1.jsonl");
   });
 });
 
@@ -210,5 +218,56 @@ describe("runWorkflow", () => {
     expect(starts.length).toBe(3);
     expect(ends.length).toBe(3);
     expect(ends.filter((e) => e.ok === false).map((e) => e.kind)).toEqual(["timeout"]);
+  });
+});
+
+describe("runWorkflow — resume passthrough", () => {
+  test("deps.resume serves a cached hit: the adapter is never invoked", async () => {
+    const workflow = async (rt: any) => {
+      rt.phase("Greet");
+      const x = await rt.agent("hi");
+      return { x };
+    };
+
+    // Run 1 — live, records the journal.
+    const lines: string[] = [];
+    const out1 = await runWorkflow(
+      { wfPath: "w", agent: "fake", args: undefined, pretty: false },
+      {
+        loadWorkflow: async () => ({ workflow, fake: { default: { text: "yo" } } }),
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter(wf.fake) }),
+        journalSink: (l) => lines.push(l),
+        now: () => 0,
+        runId: () => "r1",
+      },
+    );
+    expect(JSON.parse(out1.stdout!)).toEqual({ x: "yo" });
+
+    // Run 2 — resume from run 1's journal. The adapter would throw if invoked,
+    // proving the cached hit short-circuits before the adapter.
+    let invoked = 0;
+    const out2 = await runWorkflow(
+      { wfPath: "w", agent: "fake", args: undefined, pretty: false },
+      {
+        loadWorkflow: async () => ({ workflow }),
+        resolveAdapter: () => ({
+          adapter: {
+            name: "explosive",
+            async invoke() {
+              invoked++;
+              throw new Error("adapter must not run on a cached hit");
+            },
+          },
+        }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "r2",
+        resume: makeResumeIndexFromLines(lines),
+      },
+    );
+
+    expect(out2.exitCode).toBe(0);
+    expect(JSON.parse(out2.stdout!)).toEqual({ x: "yo" }); // cached from run 1
+    expect(invoked).toBe(0);
   });
 });
