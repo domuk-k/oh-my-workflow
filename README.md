@@ -10,7 +10,7 @@
 ## Try it now — free, no API key
 
 ```sh
-git clone <repo-url> && cd oh-my-workflow   # repo not yet public; fill in the URL
+git clone https://github.com/domuk-k/oh-my-workflow && cd oh-my-workflow
 bun install
 bun src/cli/omw.ts run examples/deep-research --agent fake
 ```
