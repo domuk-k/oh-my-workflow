@@ -1,0 +1,24 @@
+# B0 GATE — the working-skeleton gate from the launch strategy: every push runs
+# the type check and the full bun test suite (5-hook spine + schema-fail→retry→null).
+# Red here means no launch.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
