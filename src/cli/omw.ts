@@ -5,6 +5,7 @@
 
 import { runCommand } from "./run";
 import { replayCommand } from "./replay";
+import { validateCommand } from "./validate";
 
 const io = {
   stdout: (s: string) => process.stdout.write(s),
@@ -18,12 +19,15 @@ async function main(argv: string[]): Promise<number> {
       return runCommand(rest, io);
     case "replay":
       return replayCommand(rest, io);
+    case "validate":
+      return validateCommand(rest, io);
     default:
       io.stderr(
         "usage: omw <command>\n\n" +
           "commands:\n" +
           "  run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--resume <journal.jsonl>] [--pretty]\n" +
-          "  replay <journal.jsonl> [--json]\n\n" +
+          "  replay <journal.jsonl> [--json]\n" +
+          "  validate <workflow> [--json]\n\n" +
           "free demo (no API key):  omw run examples/deep-research --agent fake\n",
       );
       return cmd === undefined ? 2 : 2;

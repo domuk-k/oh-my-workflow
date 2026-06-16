@@ -306,3 +306,56 @@ describe("runCommand — resume input guards", () => {
     expect(errs.join("")).toContain("resume_read_failed");
   });
 });
+
+describe("runWorkflow — internal_error escalation", () => {
+  test("a node that fails with internal_error (author bug) → exit 4, result still on stdout, structured error", async () => {
+    const lines: string[] = [];
+    const loaded = {
+      // An invalid JSON Schema makes the gate's validator fail to compile →
+      // internal_error (an author bug), distinct from a flaky node.
+      workflow: async (rt: any) => {
+        const x = await rt.agent("compute", { schema: { type: "bogus-not-a-type" } });
+        return { x };
+      },
+      fake: { default: { text: '{"n":1}' } },
+    };
+
+    const outcome = await runWorkflow(
+      { wfPath: "w", agent: "fake", args: undefined, pretty: false },
+      {
+        loadWorkflow: async () => loaded,
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter(wf.fake) }),
+        journalSink: (l) => lines.push(l),
+        now: () => 0,
+        runId: () => "test",
+      },
+    );
+
+    expect(outcome.exitCode).toBe(4); // escalated out of the null-contract
+    expect(JSON.parse(outcome.stdout!)).toEqual({ x: null }); // partial result still emitted
+    expect((outcome.error as any).error).toBe("internal_error_nodes");
+    expect((outcome.error as any).calls).toEqual([1]);
+    // run is bracketed ok:false so the journal reflects the author bug
+    const evs = lines.map((l) => JSON.parse(l));
+    expect(evs[evs.length - 1]).toMatchObject({ ev: "run_end", ok: false });
+  });
+
+  test("a normal flaky-node failure stays exit 0 (null-contract intact)", async () => {
+    const loaded = {
+      workflow: async (rt: any) => ({ x: await rt.agent("compute", { schema: { type: "object" } }) }),
+      fake: { default: { fail: "timeout" as const } },
+    };
+    const outcome = await runWorkflow(
+      { wfPath: "w", agent: "fake", args: undefined, pretty: false },
+      {
+        loadWorkflow: async () => loaded,
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter(wf.fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "test",
+      },
+    );
+    expect(outcome.exitCode).toBe(0); // timeout is a flaky node, not an author bug
+    expect(JSON.parse(outcome.stdout!)).toEqual({ x: null });
+  });
+});

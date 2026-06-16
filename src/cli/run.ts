@@ -10,7 +10,7 @@ import { makeClaudeAdapter } from "../adapters/claude";
 import { makeCodexAdapter } from "../adapters/codex";
 import type { Runtime } from "../runtime";
 import { makeRuntime } from "../runtime";
-import { makeJournal, parseJournalLines } from "../journal";
+import { makeJournal, parseJournalLines, type JournalEvent } from "../journal";
 import type { ResumeIndex } from "../resume";
 import { makeResumeIndexFromLines } from "../resume";
 
@@ -138,7 +138,8 @@ export type RunDeps = {
 
 export type RunOutcome = {
   exitCode: number;
-  /** The result JSON — a single blob, stdout only. Present on exit 0. */
+  /** The result JSON — a single blob, stdout only. Present on exit 0 and on
+   *  exit 4 (completed, but a node hit internal_error). */
   stdout?: string;
   /** Structured error for stderr on a non-zero exit. */
   error?: object;
@@ -169,7 +170,26 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
   journal.runStart({ run: runId, wf: opts.wfPath });
   try {
     const result = await loaded.workflow(rt, opts.args);
-    journal.runEnd({ ok: true });
+    // internal_error is an AUTHOR bug (e.g. a JSON Schema that won't compile),
+    // not a flaky node — the null-contract absorbs it so the run completes, but
+    // we escalate to exit 4 so a caller (or authoring agent) doesn't read the
+    // null as a legitimate abstention. The partial result still goes to stdout.
+    const internalErrors = journal
+      .events()
+      .filter((e): e is Extract<JournalEvent, { ev: "agent_end" }> => e.ev === "agent_end" && !e.ok && e.kind === "internal_error")
+      .map((e) => e.call);
+    journal.runEnd({ ok: internalErrors.length === 0 });
+    if (internalErrors.length > 0) {
+      return {
+        exitCode: 4,
+        stdout: JSON.stringify(result),
+        error: {
+          error: "internal_error_nodes",
+          calls: internalErrors,
+          hint: "a node failed to compile/execute (likely an invalid JSON Schema) — see the journal's internal_error entries",
+        },
+      };
+    }
     return { exitCode: 0, stdout: JSON.stringify(result) };
   } catch (e) {
     // A throw escaping the workflow body is a SCRIPT error (the authored JS), not
@@ -278,11 +298,8 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
     resume,
   });
 
-  if (outcome.exitCode === 0 && outcome.stdout !== undefined) {
-    io.stdout(outcome.stdout + "\n");
-  } else if (outcome.error) {
-    io.stderr(JSON.stringify(outcome.error) + "\n");
-  }
+  if (outcome.stdout !== undefined) io.stdout(outcome.stdout + "\n");
+  if (outcome.error) io.stderr(JSON.stringify(outcome.error) + "\n");
 
   // Only surface the journal when a run actually recorded one — a load/adapter
   // failure (exit 1/3) writes no events, so pointing at an empty file misleads.
