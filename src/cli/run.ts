@@ -10,7 +10,7 @@ import { makeClaudeAdapter } from "../adapters/claude";
 import { makeCodexAdapter } from "../adapters/codex";
 import type { Runtime } from "../runtime";
 import { makeRuntime } from "../runtime";
-import { makeJournal } from "../journal";
+import { makeJournal, parseJournalLines } from "../journal";
 import type { ResumeIndex } from "../resume";
 import { makeResumeIndexFromLines } from "../resume";
 
@@ -59,6 +59,7 @@ export function parseRunArgs(argv: string[]): ParseResult {
         break;
       case "--resume":
         resume = argv[++i];
+        if (!resume) return { ok: false, error: "--resume requires a journal path" };
         break;
       default:
         if (wfPath === undefined) wfPath = tok;
@@ -248,11 +249,19 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   // unreadable --resume path is a user error, not a reason to silently run live).
   let resume: ResumeIndex | undefined;
   if (parsed.value.resume) {
+    let lines: string[];
     try {
-      resume = makeResumeIndexFromLines(readFileSync(parsed.value.resume, "utf8").split("\n"));
+      lines = readFileSync(parsed.value.resume, "utf8").split("\n");
     } catch {
       io.stderr(JSON.stringify({ error: "resume_read_failed", path: parsed.value.resume }) + "\n");
       return 1;
+    }
+    resume = makeResumeIndexFromLines(lines);
+    if (resume.size === 0) {
+      // Readable but no cached nodes (empty/truncated/wrong file). Warn instead
+      // of silently re-running every node live — which the user would read as a
+      // free resume while paying full adapter cost.
+      io.stderr(JSON.stringify({ warning: "resume_empty", path: parsed.value.resume }) + "\n");
     }
   }
 
@@ -290,13 +299,7 @@ export function renderTree(lines: string[]): string {
   const out: string[] = [];
   let ok = 0;
   let failed = 0;
-  for (const line of lines) {
-    let e: any;
-    try {
-      e = JSON.parse(line);
-    } catch {
-      continue;
-    }
+  for (const e of parseJournalLines(lines)) {
     switch (e.ev) {
       case "run_start":
         out.push(`run ${e.run}${e.wf ? ` (${e.wf})` : ""}`);

@@ -2,7 +2,10 @@
 // surface a stranger types is fixed here before any orchestration exists.
 
 import { test, expect, describe } from "bun:test";
-import { parseRunArgs, runWorkflow, resolveAdapter } from "../src/cli/run";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { parseRunArgs, runCommand, runWorkflow, resolveAdapter } from "../src/cli/run";
 import { makeFakeAdapter } from "../src/adapters/fake";
 import { makeResumeIndexFromLines } from "../src/resume";
 
@@ -68,6 +71,11 @@ describe("parseRunArgs", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error("expected ok");
     expect(r.value.resume).toBe(".omw/r-1.jsonl");
+  });
+
+  test("--resume with no path (trailing flag) or an empty value is a usage error", () => {
+    expect(parseRunArgs(["w", "--agent", "fake", "--resume"]).ok).toBe(false);
+    expect(parseRunArgs(["w", "--agent", "fake", "--resume", ""]).ok).toBe(false);
   });
 });
 
@@ -269,5 +277,32 @@ describe("runWorkflow — resume passthrough", () => {
     expect(out2.exitCode).toBe(0);
     expect(JSON.parse(out2.stdout!)).toEqual({ x: "yo" }); // cached from run 1
     expect(invoked).toBe(0);
+  });
+});
+
+describe("runCommand — resume input guards", () => {
+  test("warns (does not silently run live) when the --resume journal yields no cached nodes", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omw-resume-"));
+    const emptyJournal = join(dir, "empty.jsonl");
+    writeFileSync(emptyJournal, ""); // readable, but zero events
+
+    const errs: string[] = [];
+    const code = await runCommand(
+      ["examples/deep-research", "--agent", "fake", "--resume", emptyJournal],
+      { stdout: () => {}, stderr: (s) => errs.push(s), omwDir: join(dir, ".omw"), runId: () => "rtest" },
+    );
+
+    expect(code).toBe(0); // still completes (live) — but the user is told
+    expect(errs.join("")).toContain("resume_empty");
+  });
+
+  test("exit 1 + resume_read_failed when the --resume path is unreadable", async () => {
+    const errs: string[] = [];
+    const code = await runCommand(
+      ["examples/deep-research", "--agent", "fake", "--resume", "/no/such/journal.jsonl"],
+      { stdout: () => {}, stderr: (s) => errs.push(s), omwDir: mkdtempSync(join(tmpdir(), "omw-r2-")), runId: () => "rtest" },
+    );
+    expect(code).toBe(1);
+    expect(errs.join("")).toContain("resume_read_failed");
   });
 });

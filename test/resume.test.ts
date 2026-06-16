@@ -67,3 +67,19 @@ describe("makeResumeIndexFromLines", () => {
     if (hit.found) expect(hit.value).toEqual({ n: 7 });
   });
 });
+
+describe("ResumeIndex.size", () => {
+  test("counts only cached ok nodes; an empty/all-failed journal is 0", () => {
+    const okJournal: JournalEvent[] = [
+      start(1, "sha256:p1", "sha256:o1"),
+      { ev: "agent_end", call: 1, ok: true, result: { n: 1 } },
+      start(2, "sha256:p2", "sha256:o2"),
+      { ev: "agent_end", call: 2, ok: false, kind: "timeout" },
+    ];
+    expect(makeResumeIndex(okJournal).size).toBe(1); // only the ok node
+
+    expect(makeResumeIndex([]).size).toBe(0);
+    expect(makeResumeIndexFromLines([""]).size).toBe(0); // empty/garbage file
+    expect(makeResumeIndexFromLines(["garbage {"]).size).toBe(0);
+  });
+});

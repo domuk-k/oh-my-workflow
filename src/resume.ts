@@ -4,7 +4,7 @@
 // layers on without a format change. Only ok:true ends are cached; a failed node
 // has no entry, so resume re-runs it live (partial-failure recompute).
 
-import { type JournalEvent, resumeKey } from "./journal";
+import { type JournalEvent, parseJournalLines, resumeKey } from "./journal";
 
 export type ResumeKey = { call: number; promptHash: string; optsHash: string };
 
@@ -12,6 +12,9 @@ export type ResumeHit = { found: false } | { found: true; value: unknown };
 
 export type ResumeIndex = {
   lookup(key: ResumeKey): ResumeHit;
+  /** Count of cached (ok) nodes available to resume. 0 means an empty/truncated/
+   *  wrong journal, so the caller can warn instead of silently re-running live. */
+  size: number;
 };
 
 export function makeResumeIndex(events: JournalEvent[]): ResumeIndex {
@@ -33,6 +36,7 @@ export function makeResumeIndex(events: JournalEvent[]): ResumeIndex {
       if (!results.has(rk)) return { found: false };
       return { found: true, value: results.get(rk) };
     },
+    size: results.size,
   };
 }
 
@@ -40,14 +44,5 @@ export function makeResumeIndex(events: JournalEvent[]): ResumeIndex {
  *  Tolerates blank/malformed lines the same way the replay summarizer does, so a
  *  partially-flushed journal still resumes its valid prefix. */
 export function makeResumeIndexFromLines(lines: string[]): ResumeIndex {
-  const events: JournalEvent[] = [];
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    try {
-      events.push(JSON.parse(line) as JournalEvent);
-    } catch {
-      // skip malformed line
-    }
-  }
-  return makeResumeIndex(events);
+  return makeResumeIndex(parseJournalLines(lines));
 }
