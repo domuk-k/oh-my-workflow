@@ -384,10 +384,20 @@ key changed re-run; verified end-to-end on `--agent fake`).
   keep it**. A guard that *enforces* it in resume mode is v2.
 - *Resume is per-node, not dependency-aware*: it matches `(callIndex, promptHash,
   optsHash)`, so an upstream edit invalidates a downstream node **only if** that
-  output is threaded into the downstream prompt/opts. Thread outputs through
-  prompts (the deep-research shape) for prefix-like invalidation; otherwise a
-  resumed downstream node can be served stale. Dependency-aware cascade is a
-  candidate for v2.
+  output is threaded into the downstream prompt/opts. This is deliberate — it
+  preserves **parallel/pipeline sibling cache** (independent fan-out nodes aren't
+  forced live just because an earlier sibling changed). **The trap**: an omw node
+  is a whole coding-agent CLI that works on the **filesystem**, so "node 1 writes
+  files, node 2 reads them" is the *normal* coding-agent idiom — not an exotic
+  anti-pattern — and that channel is invisible to the key. Edit node 1 → on resume
+  it re-runs and writes different files, but node 2 **hits its cache and serves a
+  summary of the old files** (silently stale). Remedies: (a) re-run fresh (drop
+  `--resume`) when an upstream's filesystem effects changed, or (b) thread a
+  content digest of the changed files into the downstream prompt so its hash moves.
+  An opt-in `--strict-resume` (prefix truncation: force every node after the first
+  key MISS live — correct cascade for *linear* workflows, but over-invalidates
+  *parallel* siblings) and a dependency-aware cascade are both **v2** candidates;
+  per-node stays the default precisely because it keeps the parallel cache.
 
 **❌ Not implemented (CC Workflow has these; omw v1 does not)** — `budget`
 (token-target loops), nested `workflow()` (running another workflow inline), a

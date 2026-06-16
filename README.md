@@ -129,8 +129,12 @@ omw externalizes a pattern Claude Code uses internally for dynamic workflows
   `agent_end{cached:true}`) and re-runs the rest — verified end-to-end on
   `--agent fake`. Resume is **per-node key match, not dependency-aware**: it
   behaves as longest-unchanged-prefix only when upstream outputs flow into
-  downstream prompts (the usual data-flow shape); a workflow that passes state
-  out-of-band can reuse a downstream node built from an upstream that changed.
+  downstream prompts (the usual data-flow shape). When nodes instead pass state
+  through the **filesystem** (the normal coding-agent idiom — node 1 writes files
+  node 2 reads), an upstream edit re-runs node 1 but a cached node 2 serves a
+  **stale** result; re-run fresh, or thread a file digest into the downstream
+  prompt. Keeping per-node preserves parallel/pipeline sibling cache; a
+  `--strict-resume` prefix-truncation opt-in and dependency-aware cascade are v2.
   It holds **only for deterministic workflows**: omw can't *enforce* determinism
   (no sandbox), so that stays a convention you keep (enforcement is v2). `omw replay` remains a
   read-only **fixture replay** (reconstructing a recorded run's view), a separate
