@@ -34,22 +34,35 @@ bad node never crashes the run.
 single raw LLM API call (that's LangGraph/Mastra territory; an omw node is a
 *whole coding agent*).
 
-## The 30-second free demo (no API key)
+## The 30-second free demo (no API key, nothing to clone)
+
+omw is on npm, so you can run the whole thing in one line — no install step, no
+key, no cost:
 
 ```sh
-git clone <repo-url> && cd oh-my-workflow   # repo not yet public; fill in the URL
-bun install
-bun src/cli/omw.ts run examples/deep-research --agent fake
-# → {"confirmed":[…],"summary":{…}}     exit 0 · no key · no cost · `--agent fake` is deterministic
+bunx oh-my-workflow@latest run examples/deep-research --agent fake
+# → {"confirmed":[…],"summary":{…}}    exit 0 · no key · no cost · deterministic
 ```
 
-`--agent fake` is a built-in deterministic adapter: it runs the full spine
-(fan-out + pipeline + a scripted schema-fail→self-repair + a scripted
-timeout→drop) and prints one result JSON. Add `--pretty` to see the phase/fan-out
-tree on stderr. Swap `--agent claude` once you've run `claude login`.
+> Tip: use `@latest`. A bare `bunx oh-my-workflow` can serve a stale cached copy.
 
-> Once published this is `bunx oh-my-workflow run …`; today run the bin directly
-> from a clone as shown above.
+That single command runs the **whole spine** for you — a fan-out search, a
+pipeline, a scripted schema-fail→self-repair, and a scripted timeout→drop — and
+prints one result JSON. Want to watch it happen? Add `--pretty` for the
+phase/fan-out tree on stderr:
+
+```sh
+bunx oh-my-workflow@latest run examples/deep-research --agent fake --pretty
+```
+
+`--agent fake` is a built-in, deterministic adapter — it's the no-key demo engine
+and the test double. When you're ready for real work, run `claude login` once and
+swap `--agent fake` → `--agent claude`. Same script, real nodes.
+
+> **Reading this as a skill?** You already have it. To install/update it for a
+> coding agent: `bunx oh-my-workflow@latest skill install` (→ `~/.claude/skills/`,
+> or `--project` for one repo); `omw skill path` prints the bundled copy for other
+> hosts. Re-run `skill install` anytime to refresh.
 
 ---
 
@@ -389,8 +402,8 @@ agents that expose such a CLI can be nodes.
 | adapter | status | invoke | structured out | in-session follow-up |
 |---|---|---|---|---|
 | **fake** | built-in, free, deterministic | in-process fixtures | as scripted | yes (fixture) |
-| **claude** | **full** (live-verified, claude 2.1.177) | `claude -p <p> --output-format json` | parse `.result` | `--resume` |
-| **codex** | **experimental** (live-verified, codex 0.137.0) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` |
+| **claude** | **full** (live-verified, claude 2.1.x) | `claude -p <p> --output-format json` | parse `.result` | `--resume` |
+| **codex** | **experimental** (live-verified, codex 0.137.x) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` |
 | **pi** | planned | `pi --print` | stdout | — |
 | **kiro** | **not a fit** | — | — | — |
 
