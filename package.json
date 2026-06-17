@@ -3,7 +3,7 @@
   "version": "0.2.1",
   "description": "Run coding-agent CLIs (claude -p / codex exec) as nodes in a plain-JS workflow. The thin deterministic glue.",
   "type": "module",
-  "author": "Dongwook Kim (https://github.com/domuk-k)",
+  "author": "Dongwook Kim <dannyworks102@gmail.com> (https://github.com/domuk-k)",
   "engines": {
     "bun": ">=1.0.0"
   },
