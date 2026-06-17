@@ -94,6 +94,7 @@ const out = await rt.agent("SCOPE the question into topics", {
   timeoutMs: 120_000,    // kill the subprocess after this; failure kind = "timeout"
   cwd: "/path/to/repo",  // run the agent in this directory
   maxRetries: 2,         // schema-gate retries (default 2 → up to 3 attempts)
+  inheritHostMcp: false, // default: isolate from host MCP servers (fast). true = inherit (claude only)
 });
 ```
 
@@ -402,8 +403,8 @@ agents that expose such a CLI can be nodes.
 | adapter | status | invoke | structured out | in-session follow-up |
 |---|---|---|---|---|
 | **fake** | built-in, free, deterministic | in-process fixtures | as scripted | yes (fixture) |
-| **claude** | **full** (live-verified, claude 2.1.x) | `claude -p <p> --output-format json` | parse `.result` | `--resume` |
-| **codex** | **experimental** (live-verified, codex 0.137.x) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` |
+| **claude** | **full** (live-verified, claude 2.1.x) | `claude -p <p> --output-format json --strict-mcp-config` | parse `.result` | `--resume` (same cwd) |
+| **codex** | **experimental** (live-verified, codex 0.137.x) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` (same cwd) |
 | **pi** | planned | `pi --print` | stdout | — |
 | **kiro** | **not a fit** | — | — | — |
 
@@ -413,7 +414,12 @@ agents that expose such a CLI can be nodes.
 
 - **claude** renames its envelope onto omw's contract (`session_id→sessionId`,
   `total_cost_usd→costUsd`, `duration_ms→durationMs`; `is_error`/non-success
-  `subtype` → `ok:false`).
+  `subtype` → `ok:false`). By default a node runs **isolated from the host's MCP
+  servers** (`--strict-mcp-config`) — booting figma/devtools/etc. on every node is
+  the dominant fan-out latency, and a coding-agent node rarely needs them. Opt back
+  in per call with `agent(prompt, { inheritHostMcp: true })`. The schema-gate
+  `--resume` runs in the **same cwd** as the original invoke (claude scopes session
+  history by project directory) and **mirrors the same MCP choice**.
 - **codex** is experimental: it has **no cost field** (tokens only, so `costUsd`
   stays undefined), and its JSONL can include malformed lines under MCP
   (openai/codex#15451) — omw tolerates them line-by-line and fails *actionably*

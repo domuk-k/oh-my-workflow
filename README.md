@@ -118,7 +118,7 @@ A node is a coding agent driven through its headless prompt→result CLI.
 | adapter | status | notes |
 |---|---|---|
 | **fake** | built-in, free, deterministic | the no-key demo engine and test double |
-| **claude** | **full** (live-verified, 2.1.x) | `claude -p --output-format json`; `--resume` powers in-session schema self-repair |
+| **claude** | **full** (live-verified, 2.1.x) | `claude -p --output-format json --strict-mcp-config` (nodes isolated from host MCP by default; opt in per call with `inheritHostMcp`); `--resume` (same cwd) powers in-session schema self-repair |
 | **codex** | **experimental** (live-verified, 0.137.x) | `codex exec --json`; **no cost field**; tolerates malformed JSONL ([openai/codex#15451](https://github.com/openai/codex/issues/15451)) and fails *actionably* |
 | **pi** | planned | not wired yet (`--agent pi` → exit 3 + install hint) |
 | **kiro** | not a fit | its CLI is an IDE launcher (open files/diffs), no headless prompt→result interface |
