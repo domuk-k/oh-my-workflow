@@ -52,9 +52,11 @@ export function parseCodexJsonl(stdout: string): AgentResult {
   }
 
   if (failure) {
-    // N/A: codex exposes no distinct refusal signal (its stream surfaces only
-    // `error` / `turn.failed`), so a decline can't be told apart from a crash
-    // here — both stay `nonzero_exit`. The `refusal` kind is claude-specific.
+    // No refusal kind for codex: its stream has no distinct decline signal. A
+    // hard failure (`error` / `turn.failed`) is nonzero_exit; a SOFT decline
+    // ("I can't help with that") instead arrives as a normal agent_message and
+    // returns ok:true below — an invisible abstention we can't tell from a real
+    // answer here. So codex declines are NOT nonzero_exit; refusal is claude-only.
     return { ok: false, kind: "nonzero_exit", stderr: `codex: ${failure}`, meta: { durationMs: 0 } };
   }
   if (lastMessage === undefined) {

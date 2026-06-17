@@ -19,16 +19,27 @@ export function parseClaudeResult(raw: unknown): AgentResult {
   const j = raw as Record<string, unknown> | null;
   const durationMs = Number(j?.duration_ms) || 0;
 
+  // A safety/decline refusal (stop_reason "refusal") is a journaled DECLINE — not
+  // a crash, and not a real answer. Classify it FIRST, before the is_error/subtype
+  // envelope checks, so a decline that arrives as subtype:"success" isn't mistaken
+  // for an empty success. Carrier per the API docs is stop_reason; subtype is
+  // matched defensively. The decline category (stop_details.category) is journaled
+  // so the reason stays auditable. Not yet verified against a live CLI refusal.
+  if (j?.stop_reason === "refusal" || j?.subtype === "refusal") {
+    const detail = typeof j?.result === "string" ? j.result : "";
+    const sd = j?.stop_details as { category?: unknown } | undefined;
+    const category = typeof sd?.category === "string" ? sd.category : "";
+    return {
+      ok: false,
+      kind: "refusal",
+      stderr: `refusal${category ? `(${category})` : ""}: ${detail}`.trim(),
+      meta: { durationMs },
+    };
+  }
+
   if (!j || j.type !== "result" || j.is_error === true || j.subtype !== "success") {
     const subtype = (j?.subtype ?? j?.type ?? "unknown") as string;
     const detail = typeof j?.result === "string" ? j.result : "";
-    // A safety/decline refusal (HTTP 200, stop_reason "refusal") is a journaled
-    // outcome, not a crash — surface a distinct `refusal` kind so an abstain-
-    // quorum can treat declined ≠ failed. Match either carrier the CLI may use;
-    // grounded in the documented API signal; not yet verified against a live CLI refusal.
-    if (j?.subtype === "refusal" || j?.stop_reason === "refusal") {
-      return { ok: false, kind: "refusal", stderr: `refusal: ${detail}`.trim(), meta: { durationMs } };
-    }
     return { ok: false, kind: "nonzero_exit", stderr: `${subtype}: ${detail}`.trim(), meta: { durationMs } };
   }
 

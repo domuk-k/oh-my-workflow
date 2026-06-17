@@ -67,6 +67,27 @@ describe("parseClaudeResult", () => {
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("expected fail");
     expect(r.kind).toBe("refusal");
+    // the decline category is journaled so the reason stays auditable
+    expect(r.stderr).toContain("cyber");
+  });
+
+  // A decline can arrive with subtype:"success" + is_error:false (the request
+  // didn't error, the model just declined). It must STILL read as a refusal —
+  // classified before the envelope check — not as an empty ok:true success.
+  test("a refusal with subtype:'success' is still kind 'refusal', not an empty ok", () => {
+    const r = parseClaudeResult({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      stop_reason: "refusal",
+      stop_details: { category: "bio" },
+      result: "",
+      duration_ms: 3,
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected refusal, got ok");
+    expect(r.kind).toBe("refusal");
+    expect(r.stderr).toContain("bio");
   });
 });
 
