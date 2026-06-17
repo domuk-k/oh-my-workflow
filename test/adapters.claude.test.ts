@@ -48,6 +48,26 @@ describe("parseClaudeResult", () => {
     const r = parseClaudeResult({ type: "system", subtype: "init" });
     expect(r.ok).toBe(false);
   });
+
+  // A safety/decline refusal is HTTP 200 with stop_reason "refusal" (captured
+  // shape — not yet verified against a live CLI refusal). It must read as a
+  // DECLINE, not a crash, so the abstain-quorum can treat declined ≠ failed.
+  test("a refusal (stop_reason:refusal, HTTP 200) -> ok:false with kind 'refusal'", () => {
+    const refusalJson = {
+      type: "result",
+      subtype: "refusal",
+      is_error: false,
+      stop_reason: "refusal",
+      stop_details: { category: "cyber" },
+      result: "",
+      session_id: "s-ref",
+      duration_ms: 5,
+    };
+    const r = parseClaudeResult(refusalJson);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected fail");
+    expect(r.kind).toBe("refusal");
+  });
 });
 
 describe("makeClaudeAdapter (injected spawn)", () => {

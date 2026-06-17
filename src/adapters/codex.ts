@@ -52,6 +52,9 @@ export function parseCodexJsonl(stdout: string): AgentResult {
   }
 
   if (failure) {
+    // N/A: codex exposes no distinct refusal signal (its stream surfaces only
+    // `error` / `turn.failed`), so a decline can't be told apart from a crash
+    // here — both stay `nonzero_exit`. The `refusal` kind is claude-specific.
     return { ok: false, kind: "nonzero_exit", stderr: `codex: ${failure}`, meta: { durationMs: 0 } };
   }
   if (lastMessage === undefined) {

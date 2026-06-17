@@ -3,8 +3,10 @@
 // Kept tiny on purpose: a node is a whole coding agent, not a single LLM call.
 
 /** Why an invocation failed. The journal records this `kind` so the authoring
- *  agent can read WHICH failure happened and repair its own script. */
-export type AgentFailureKind = "timeout" | "nonzero_exit" | "spawn_failure";
+ *  agent can read WHICH failure happened and repair its own script.
+ *  `refusal` is a DECLINE (the model said no — HTTP 200, `stop_reason:"refusal"`),
+ *  kept distinct from a crash so an abstain-quorum can treat declined ≠ failed. */
+export type AgentFailureKind = "timeout" | "nonzero_exit" | "spawn_failure" | "refusal";
 
 export type AgentResult =
   | {

@@ -89,6 +89,17 @@ describe("runtime.agent — schema + null-contract", () => {
     expect(end.kind).toBe("timeout");
   });
 
+  test("a refusal (decline) resolves to null and journals kind:'refusal', distinct from a crash", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ fail: "refusal" }] }] });
+    const rt = makeRuntime({ adapter, journal });
+    // Stays inside the null-contract: a decline is a journaled outcome, not a throw.
+    expect(await rt.agent("do something the model declines", { schema: numSchema })).toBeNull();
+    const end = journal.events().find((e) => e.ev === "agent_end") as Extract<JournalEvent, { ev: "agent_end" }>;
+    expect(end.ok).toBe(false);
+    expect(end.kind).toBe("refusal");
+  });
+
   test("null-contract holds on the no-schema path: adapter failure -> null", async () => {
     const journal = makeJournal({ now: () => 0 });
     const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ fail: "nonzero_exit" }] }] });

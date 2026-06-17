@@ -22,6 +22,13 @@ export function parseClaudeResult(raw: unknown): AgentResult {
   if (!j || j.type !== "result" || j.is_error === true || j.subtype !== "success") {
     const subtype = (j?.subtype ?? j?.type ?? "unknown") as string;
     const detail = typeof j?.result === "string" ? j.result : "";
+    // A safety/decline refusal (HTTP 200, stop_reason "refusal") is a journaled
+    // outcome, not a crash — surface a distinct `refusal` kind so an abstain-
+    // quorum can treat declined ≠ failed. Match either carrier the CLI may use;
+    // grounded in the documented API signal; not yet verified against a live CLI refusal.
+    if (j?.subtype === "refusal" || j?.stop_reason === "refusal") {
+      return { ok: false, kind: "refusal", stderr: `refusal: ${detail}`.trim(), meta: { durationMs } };
+    }
     return { ok: false, kind: "nonzero_exit", stderr: `${subtype}: ${detail}`.trim(), meta: { durationMs } };
   }
 

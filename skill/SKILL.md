@@ -172,6 +172,70 @@ async function survives(rt, claim) {
 }
 ```
 
+**Fresh context is the point — not self-critique.** Each `rt.agent()` call is a
+brand-new `claude -p` subprocess with no memory of the producer's turn, so a
+verify-vote node judges the claim cold. That is the structural form of Anthropic's
+own guidance for its most capable model: *"Separate, fresh-context verifier
+subagents tend to outperform self-critique"* ([Fable 5 prompting
+guide](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5)).
+omw gets it for free — **as long as you keep verification a separate `agent()`
+call.** Do **not** verify by feeding the result back into the producer's own
+session: the schema-gate's in-session self-repair (the `--resume` / `followUp`
+path) deliberately *reuses* the producer's context to fix output **format**, which
+is the exact opposite of fresh-context verification. Use self-repair to make a
+node's JSON valid; use a new `agent()` to judge whether the *content* is true.
+(A **cross-CLI** verifier — a different agent CLI than the producer, so a shared
+memorized shortcut can't survive both — is a natural extension but **not a feature
+today**: omw binds one adapter per run, so per-node verifier selection is future
+work. Verify with fresh same-CLI nodes for now.)
+
+### Gate on evidence, not intent
+
+The schema gate can only check the *shape* of what a node returns — so for an
+**action-producing** node (one that builds, runs, edits, or fetches), make the
+schema **`required` the evidence the action leaves behind** (an exit code, a test
+count, a file path, the observed output), not just a plan or a `rationale`
+string. A frontier model can fabricate status ("I'll now run the tests…") with no
+tool call behind it; if "I did X" prose satisfies your gate, the gate verifies
+nothing. Requiring the artifact makes an intent string fail validation — the node
+must actually produce the proof:
+
+```ts
+// ✗ intent-only — "I ran the build" text passes this gate
+const weak = { type: "object", required: ["summary"], properties: { summary: { type: "string" } } };
+
+// ✓ evidence-bearing — the node must surface what the action actually produced
+const strong = {
+  type: "object",
+  required: ["command", "exitCode", "testsPassed", "output"],
+  properties: {
+    command: { type: "string" },
+    exitCode: { type: "number" },
+    testsPassed: { type: "number" },
+    output: { type: "string" },           // the observed tail, not a claim about it
+  },
+};
+const built = await rt.agent("Run the build and the test suite. Report the command, its exit code, the number of passing tests, and the tail of the output.", { schema: strong });
+```
+
+**Executable-evidence verify node** — combine this with fresh-context verification:
+a separate node *runs what the producer built and observes the result* before the
+finding is accepted, rather than judging the producer's description of it.
+
+```ts
+const verified = (await rt.pipeline(
+  artifacts,
+  async (a) => {
+    // a.path was written by an upstream node; this fresh node runs it and reports facts.
+    const v = await rt.agent(
+      `Run \`${a.runCmd}\` in ${a.path}. Report exitCode and the output tail. Do not fix anything — only observe and report.`,
+      { schema: { type: "object", required: ["exitCode", "output"], properties: { exitCode: { type: "number" }, output: { type: "string" } } } },
+    );
+    return v && (v as { exitCode: number }).exitCode === 0 ? { ...a, ...(v as object) } : null;
+  },
+)).filter(Boolean);                         // anything that didn't run clean abstains
+```
+
 ### Pipeline (no barrier)
 
 ```ts
@@ -246,6 +310,14 @@ A terminal failure carries the **kind** so you know what to fix:
 Failure `kind`s on `agent_end`:
 
 - **adapter**: `timeout` · `nonzero_exit` · `spawn_failure` (the CLI itself failed)
+- **`refusal`**: the model **declined** the task (a safety/decline outcome — HTTP
+  200, `stop_reason:"refusal"` — not a crash). Detected by the `claude` adapter;
+  N/A for `codex` (no distinct refusal signal → it stays `nonzero_exit`). Kept
+  separate so an abstain-quorum can treat **declined ≠ failed**: a node that
+  *can't* answer and a node that *won't* are different signals, and the journaled
+  kind makes *why* a null happened auditable. It still abstains (resolves to
+  `null`, dropped by `filter(Boolean)`) — `refusal` is a journaled outcome, never
+  a thrown error or a silent pass.
 - **gate**: `no_json` · `schema_violation` (the node never produced valid JSON in
   `maxRetries+1` attempts — `rawText` is journaled so you can see what it said)
 - **`internal_error`**: a bug in omw or your schema (e.g. an invalid JSON Schema
