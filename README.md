@@ -94,6 +94,23 @@ and fix your script. stdout is one result JSON; the `--pretty` tree and a
 (fan-out / verify-vote / pipeline / loop-until-dry), the debug loop, and the
 conventions. That skill is the primary product; this README is the human intro.
 
+## Install the skill (the primary product)
+
+omw's primary product is an **agent-authoring skill** (`skill/SKILL.md`) — it
+teaches a coding agent to write, run, and repair omw workflows. After the package
+is installed, wire the skill into your agent in one step:
+
+```sh
+omw skill install            # → ~/.claude/skills/oh-my-workflow  (Claude Code auto-discovers it)
+omw skill install --project  # → ./.claude/skills/oh-my-workflow  (this repo only)
+omw skill path               # print the bundled SKILL.md path (cat / pipe / point an agent at it)
+```
+
+Then ask your coding agent: *"use oh-my-workflow to &lt;task&gt;"* — it authors a
+`workflow.ts` and runs it with `omw run`. (The skill is Claude-Code-flavored;
+for other hosts use `omw skill path` and feed the file in however that host loads
+context.)
+
 ## Adapters
 
 A node is a coding agent driven through its headless prompt→result CLI.
