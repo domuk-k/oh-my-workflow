@@ -138,7 +138,7 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
       if (req.model) args.push("--model", req.model);
       // Isolate the node from the host's MCP servers unless asked otherwise:
       // booting figma/devtools/etc. on every node is the dominant fan-out latency.
-      if (!req.inheritHostMcp) args.push("--strict-mcp-config");
+      if (!req.inheritMcp) args.push("--strict-mcp-config");
       return run(args, req.cwd, req.timeoutMs);
     },
     // `cwd` must match the original invoke — claude keys session history by
@@ -147,7 +147,7 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
     // same environment as the turn it continues.
     followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
       const args = ["-p", prompt, "--resume", sessionId, "--output-format", "json"];
-      if (!opts?.inheritHostMcp) args.push("--strict-mcp-config");
+      if (!opts?.inheritMcp) args.push("--strict-mcp-config");
       return run(args, opts?.cwd);
     },
   };

@@ -142,7 +142,7 @@ export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
       return run(args, req.cwd, req.timeoutMs);
     },
     // `cwd` must match the original invoke so resume finds the session.
-    // (MCP isolation / inheritHostMcp is not yet implemented for codex.)
+    // (MCP isolation / inheritMcp is not yet implemented for codex.)
     followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
       const args = ["exec", "resume", sessionId, "--json", "-s", sandbox, prompt];
       return run(args, opts?.cwd);

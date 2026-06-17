@@ -32,18 +32,19 @@ export type InvokeRequest = {
   model?: string;
   cwd?: string;
   timeoutMs?: number;
-  /** When true, the node inherits the host's MCP servers (slow startup). Default
-   *  false → the adapter isolates the node from host MCP config. A coding-agent
-   *  node rarely needs the host's servers, and booting them all is the dominant
-   *  per-node latency in a fan-out. Honored by the claude adapter
-   *  (--strict-mcp-config); the codex adapter does not yet implement isolation,
-   *  so this flag is currently a no-op there. */
-  inheritHostMcp?: boolean;
+  /** When true, the node inherits the ambient MCP configuration the CLI would
+   *  normally discover — user/global servers AND the cwd's project `.mcp.json`.
+   *  Default false → the node runs isolated: booting those servers on every node
+   *  is the dominant per-node latency in a fan-out, and inheriting them makes a
+   *  workflow non-reproducible (it behaves differently per machine). A coding-agent
+   *  node rarely needs them. Honored by the claude adapter (--strict-mcp-config);
+   *  the codex adapter does not yet implement isolation, so it is a no-op there. */
+  inheritMcp?: boolean;
 };
 
 /** The subset of InvokeRequest a resume turn must mirror from its original
  *  invoke so the repair runs in the same environment (same cwd, same MCP). */
-export type FollowUpOpts = Pick<InvokeRequest, "cwd" | "inheritHostMcp">;
+export type FollowUpOpts = Pick<InvokeRequest, "cwd" | "inheritMcp">;
 
 export type AgentPort = {
   name: string;
@@ -52,7 +53,7 @@ export type AgentPort = {
    *  re-invokes fresh with the error feedback appended to the prompt.
    *  `opts.cwd` MUST match the original invoke: claude scopes conversation history
    *  by project directory, so resuming from a different cwd fails to find the
-   *  session ("No conversation found"). `opts.inheritHostMcp` must mirror the
+   *  session ("No conversation found"). `opts.inheritMcp` must mirror the
    *  original invoke so the resume turn sees the same MCP environment. */
   followUp?(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult>;
 };

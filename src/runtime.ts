@@ -21,7 +21,7 @@ export type AgentOpts = {
   timeoutMs?: number;
   maxRetries?: number;
   /** Inherit the host's MCP servers in this node (default false → isolated, fast). */
-  inheritHostMcp?: boolean;
+  inheritMcp?: boolean;
 };
 
 // `prev`/`item` are intentionally `any`: orchestration scripts are plain JS the
@@ -138,7 +138,7 @@ export function makeRuntime(deps: {
           model: opts.model,
           cwd: opts.cwd,
           timeoutMs: opts.timeoutMs,
-          inheritHostMcp: opts.inheritHostMcp,
+          inheritMcp: opts.inheritMcp,
         });
 
       try {
@@ -172,7 +172,7 @@ export function makeRuntime(deps: {
             // repair turn runs in the same environment as the turn it continues.
             r = await adapter.followUp(lastSessionId, retryPrompt(prompt, feedback, false), {
               cwd: opts.cwd,
-              inheritHostMcp: opts.inheritHostMcp,
+              inheritMcp: opts.inheritMcp,
             });
             // Resume can fail even when the format hiccup was recoverable (e.g. a
             // killed/expired session). Don't let a broken resume be terminal —

@@ -152,8 +152,8 @@ describe("makeClaudeAdapter (injected spawn)", () => {
   });
 
   // The node is isolated from the host's MCP servers by default (booting them is
-  // the dominant fan-out latency); inheritHostMcp opts back in.
-  test("invoke adds --strict-mcp-config by default, omits it when inheritHostMcp", async () => {
+  // the dominant fan-out latency); inheritMcp opts back in.
+  test("invoke adds --strict-mcp-config by default, omits it when inheritMcp", async () => {
     const calls: string[][] = [];
     const adapter = makeClaudeAdapter({
       spawn: async (args) => {
@@ -163,13 +163,13 @@ describe("makeClaudeAdapter (injected spawn)", () => {
     });
     await adapter.invoke({ prompt: "x" });
     expect(calls[0]).toContain("--strict-mcp-config");
-    await adapter.invoke({ prompt: "x", inheritHostMcp: true });
+    await adapter.invoke({ prompt: "x", inheritMcp: true });
     expect(calls[1]).not.toContain("--strict-mcp-config");
   });
 
   // The resume turn must mirror the original invoke's MCP choice, or the
   // self-repair runs in a different environment than the turn it continues.
-  test("followUp mirrors inheritHostMcp: strict by default, omitted when inherited", async () => {
+  test("followUp mirrors inheritMcp: strict by default, omitted when inherited", async () => {
     const calls: string[][] = [];
     const adapter = makeClaudeAdapter({
       spawn: async (args) => {
@@ -179,7 +179,7 @@ describe("makeClaudeAdapter (injected spawn)", () => {
     });
     await adapter.followUp!("s", "fix", {});
     expect(calls[0]).toContain("--strict-mcp-config");
-    await adapter.followUp!("s", "fix", { inheritHostMcp: true });
+    await adapter.followUp!("s", "fix", { inheritMcp: true });
     expect(calls[1]).not.toContain("--strict-mcp-config");
   });
 

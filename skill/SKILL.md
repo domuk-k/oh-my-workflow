@@ -94,7 +94,7 @@ const out = await rt.agent("SCOPE the question into topics", {
   timeoutMs: 120_000,    // kill the subprocess after this; failure kind = "timeout"
   cwd: "/path/to/repo",  // run the agent in this directory
   maxRetries: 2,         // schema-gate retries (default 2 → up to 3 attempts)
-  inheritHostMcp: false, // default: isolate from host MCP servers (fast). true = inherit (claude only)
+  inheritMcp: false, // default: isolate from host MCP servers (fast). true = inherit (claude only)
 });
 ```
 
@@ -417,7 +417,7 @@ agents that expose such a CLI can be nodes.
   `subtype` → `ok:false`). By default a node runs **isolated from the host's MCP
   servers** (`--strict-mcp-config`) — booting figma/devtools/etc. on every node is
   the dominant fan-out latency, and a coding-agent node rarely needs them. Opt back
-  in per call with `agent(prompt, { inheritHostMcp: true })`. The schema-gate
+  in per call with `agent(prompt, { inheritMcp: true })`. The schema-gate
   `--resume` runs in the **same cwd** as the original invoke (claude scopes session
   history by project directory) and **mirrors the same MCP choice**.
 - **codex** is experimental: it has **no cost field** (tokens only, so `costUsd`
