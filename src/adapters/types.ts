@@ -33,19 +33,26 @@ export type InvokeRequest = {
   cwd?: string;
   timeoutMs?: number;
   /** When true, the node inherits the host's MCP servers (slow startup). Default
-   *  false → the adapter isolates the node from host MCP config (claude:
-   *  --strict-mcp-config). A coding-agent node rarely needs the host's servers,
-   *  and booting them all is the dominant per-node latency in a fan-out. */
+   *  false → the adapter isolates the node from host MCP config. A coding-agent
+   *  node rarely needs the host's servers, and booting them all is the dominant
+   *  per-node latency in a fan-out. Honored by the claude adapter
+   *  (--strict-mcp-config); the codex adapter does not yet implement isolation,
+   *  so this flag is currently a no-op there. */
   inheritHostMcp?: boolean;
 };
+
+/** The subset of InvokeRequest a resume turn must mirror from its original
+ *  invoke so the repair runs in the same environment (same cwd, same MCP). */
+export type FollowUpOpts = Pick<InvokeRequest, "cwd" | "inheritHostMcp">;
 
 export type AgentPort = {
   name: string;
   invoke(req: InvokeRequest): Promise<AgentResult>;
   /** Optional in-session follow-up (claude --resume). When absent, the runtime
    *  re-invokes fresh with the error feedback appended to the prompt.
-   *  `cwd` MUST match the original invoke: claude scopes conversation history by
-   *  project directory, so resuming from a different cwd fails to find the
-   *  session ("No conversation found"). */
-  followUp?(sessionId: string, prompt: string, cwd?: string): Promise<AgentResult>;
+   *  `opts.cwd` MUST match the original invoke: claude scopes conversation history
+   *  by project directory, so resuming from a different cwd fails to find the
+   *  session ("No conversation found"). `opts.inheritHostMcp` must mirror the
+   *  original invoke so the resume turn sees the same MCP environment. */
+  followUp?(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult>;
 };

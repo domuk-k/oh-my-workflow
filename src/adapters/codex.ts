@@ -11,7 +11,7 @@
 // ACTIONABLY (surfaces the reason) rather than silently returning empty — the
 // authoring agent can read WHY in the journal.
 
-import type { AgentPort, AgentResult, InvokeRequest } from "./types";
+import type { AgentPort, AgentResult, FollowUpOpts, InvokeRequest } from "./types";
 import type { ClaudeSpawn as Spawn, ClaudeSpawnResult as SpawnResult } from "./claude";
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -142,9 +142,10 @@ export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
       return run(args, req.cwd, req.timeoutMs);
     },
     // `cwd` must match the original invoke so resume finds the session.
-    followUp(sessionId: string, prompt: string, cwd?: string): Promise<AgentResult> {
+    // (MCP isolation / inheritHostMcp is not yet implemented for codex.)
+    followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
       const args = ["exec", "resume", sessionId, "--json", "-s", sandbox, prompt];
-      return run(args, cwd);
+      return run(args, opts?.cwd);
     },
   };
 }

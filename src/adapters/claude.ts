@@ -8,7 +8,7 @@
 // Spawn is injected so the parse/argv logic is tested without a subprocess or an
 // API call; the default spawn uses Bun.spawn and is exercised live under OMW_LIVE.
 
-import type { AgentPort, AgentResult, InvokeRequest } from "./types";
+import type { AgentPort, AgentResult, FollowUpOpts, InvokeRequest } from "./types";
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -143,9 +143,12 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
     },
     // `cwd` must match the original invoke — claude keys session history by
     // project directory, so resuming elsewhere yields "No conversation found".
-    followUp(sessionId: string, prompt: string, cwd?: string): Promise<AgentResult> {
-      const args = ["-p", prompt, "--resume", sessionId, "--output-format", "json", "--strict-mcp-config"];
-      return run(args, cwd);
+    // MCP isolation must mirror the original invoke so the resume turn sees the
+    // same environment as the turn it continues.
+    followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
+      const args = ["-p", prompt, "--resume", sessionId, "--output-format", "json"];
+      if (!opts?.inheritHostMcp) args.push("--strict-mcp-config");
+      return run(args, opts?.cwd);
     },
   };
 }

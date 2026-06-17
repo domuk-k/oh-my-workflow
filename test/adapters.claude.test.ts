@@ -147,7 +147,7 @@ describe("makeClaudeAdapter (injected spawn)", () => {
         return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
       },
     });
-    await adapter.followUp!("sess-123", "and again", "/repo/under/review");
+    await adapter.followUp!("sess-123", "and again", { cwd: "/repo/under/review" });
     expect(opts[0]?.cwd).toBe("/repo/under/review");
   });
 
@@ -164,6 +164,22 @@ describe("makeClaudeAdapter (injected spawn)", () => {
     await adapter.invoke({ prompt: "x" });
     expect(calls[0]).toContain("--strict-mcp-config");
     await adapter.invoke({ prompt: "x", inheritHostMcp: true });
+    expect(calls[1]).not.toContain("--strict-mcp-config");
+  });
+
+  // The resume turn must mirror the original invoke's MCP choice, or the
+  // self-repair runs in a different environment than the turn it continues.
+  test("followUp mirrors inheritHostMcp: strict by default, omitted when inherited", async () => {
+    const calls: string[][] = [];
+    const adapter = makeClaudeAdapter({
+      spawn: async (args) => {
+        calls.push(args);
+        return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
+      },
+    });
+    await adapter.followUp!("s", "fix", {});
+    expect(calls[0]).toContain("--strict-mcp-config");
+    await adapter.followUp!("s", "fix", { inheritHostMcp: true });
     expect(calls[1]).not.toContain("--strict-mcp-config");
   });
 
