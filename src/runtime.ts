@@ -63,12 +63,27 @@ export function makeLimiter(max: number) {
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+// Cap the echoed prior output so a huge malformed dump can't blow the fresh prompt.
+const RETRY_RAWTEXT_CAP = 4000;
+
 function retryPrompt(original: string, feedback: GateFeedback, fresh: boolean): string {
   const note =
     "Your previous output failed validation:\n" +
     feedback.errors.map((e) => `- ${e}`).join("\n") +
     "\nReturn ONLY corrected JSON, no prose.";
-  return fresh ? `${original}\n\n${note}` : note;
+  // In-session followUp (fresh=false): the prior attempt is still in the live
+  // transcript, so the errors alone are enough. Fresh invoke (fresh=true): a
+  // brand-new subprocess has NO memory of what it produced, so hand its own
+  // non-conforming output back (capped) to repair against — otherwise it repairs
+  // blind and tends to regress on a different field (the B6 whack-a-mole).
+  if (!fresh) return note;
+  const prior = feedback.rawText.trim();
+  const echo = prior
+    ? "\nYour previous output (fix THIS, do not start over):\n```\n" +
+      (prior.length > RETRY_RAWTEXT_CAP ? prior.slice(0, RETRY_RAWTEXT_CAP) + "\n…(truncated)" : prior) +
+      "\n```\n"
+    : "";
+  return `${original}${echo}\n${note}`;
 }
 
 export function makeRuntime(deps: {
@@ -115,19 +130,23 @@ export function makeRuntime(deps: {
       const account = (r: AgentResult) => {
         durationMs += r.ok ? r.meta.durationMs : (r.meta?.durationMs ?? 0);
       };
+      // A fresh node invocation carrying this call's options. Built in one place
+      // so the next InvokeRequest field is threaded once, not per call site.
+      const invokeFresh = (p: string) =>
+        adapter.invoke({
+          prompt: p,
+          model: opts.model,
+          cwd: opts.cwd,
+          timeoutMs: opts.timeoutMs,
+          inheritHostMcp: opts.inheritHostMcp,
+        });
 
       try {
         // No schema: one shot, raw text out (or null).
         if (!opts.schema) {
           let r: AgentResult;
           try {
-            r = await adapter.invoke({
-              prompt,
-              model: opts.model,
-              cwd: opts.cwd,
-              timeoutMs: opts.timeoutMs,
-              inheritHostMcp: opts.inheritHostMcp,
-            });
+            r = await invokeFresh(prompt);
           } catch (e) {
             // A throw at the adapter boundary IS an adapter failure.
             journal.agentEnd({ call, ok: false, kind: "spawn_failure", stderr: errMsg(e), durationMs });
@@ -149,29 +168,23 @@ export function makeRuntime(deps: {
         const gateCall: GateCall = async (_n, feedback) => {
           let r: AgentResult;
           if (feedback && lastSessionId && adapter.followUp) {
-            r = await adapter.followUp(lastSessionId, retryPrompt(prompt, feedback, false), opts.cwd);
+            // Resume in the original cwd and with the same MCP choice, so the
+            // repair turn runs in the same environment as the turn it continues.
+            r = await adapter.followUp(lastSessionId, retryPrompt(prompt, feedback, false), {
+              cwd: opts.cwd,
+              inheritHostMcp: opts.inheritHostMcp,
+            });
             // Resume can fail even when the format hiccup was recoverable (e.g. a
             // killed/expired session). Don't let a broken resume be terminal —
             // fall back to a fresh invoke with the error appended (the contract
-            // AgentPort documents for the no-followUp case).
+            // AgentPort documents for the no-followUp case). Account the failed
+            // resume too: it spawned a real subprocess, so its time is real cost.
             if (!r.ok) {
-              r = await adapter.invoke({
-                prompt: retryPrompt(prompt, feedback, true),
-                model: opts.model,
-                cwd: opts.cwd,
-                timeoutMs: opts.timeoutMs,
-                inheritHostMcp: opts.inheritHostMcp,
-              });
+              account(r);
+              r = await invokeFresh(retryPrompt(prompt, feedback, true));
             }
           } else {
-            const p = feedback ? retryPrompt(prompt, feedback, true) : prompt;
-            r = await adapter.invoke({
-              prompt: p,
-              model: opts.model,
-              cwd: opts.cwd,
-              timeoutMs: opts.timeoutMs,
-              inheritHostMcp: opts.inheritHostMcp,
-            });
+            r = await invokeFresh(feedback ? retryPrompt(prompt, feedback, true) : prompt);
           }
           account(r);
           if (r.ok && r.meta.sessionId) lastSessionId = r.meta.sessionId;

@@ -73,6 +73,81 @@ describe("runtime.agent — schema + null-contract", () => {
     expect(attempts.map((a) => (a as { kind: string }).kind)).toEqual(["schema_violation", "ok"]);
   });
 
+  test("self-repair falls back to a fresh invoke when followUp (resume) fails", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    let invokes = 0;
+    let followUps = 0;
+    // 1st invoke: invalid JSON but yields a sessionId → the retry takes the
+    // followUp path. followUp then FAILS (e.g. expired session). The gate must
+    // not treat that as terminal — it falls back to a fresh invoke, which is valid.
+    const adapter: AgentPort = {
+      name: "flaky-resume",
+      async invoke(): Promise<AgentResult> {
+        invokes++;
+        return invokes === 1
+          ? { ok: true, text: '{"wrong":1}', meta: { durationMs: 1, sessionId: "s1" } }
+          : { ok: true, text: '{"n":7}', meta: { durationMs: 1 } };
+      },
+      async followUp(): Promise<AgentResult> {
+        followUps++;
+        return { ok: false, kind: "nonzero_exit", stderr: "No conversation found", meta: { durationMs: 1 } };
+      },
+    };
+    const rt = makeRuntime({ adapter, journal });
+
+    const out = await rt.agent("compute", { schema: numSchema });
+    expect(out).toEqual({ n: 7 }); // recovered despite the broken resume
+    expect(followUps).toBe(1); // resume was attempted
+    expect(invokes).toBe(2); // and it fell back to a fresh invoke
+  });
+
+  test("fresh-retry path hands the model back its own prior non-conforming output (B6)", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    const prompts: string[] = [];
+    // No sessionId → the retry takes the FRESH-invoke path (not in-session
+    // followUp). A brand-new subprocess has no transcript of its prior attempt,
+    // so the gate must embed that attempt; otherwise the model repairs blind.
+    const adapter: AgentPort = {
+      name: "fresh-capture",
+      async invoke(req): Promise<AgentResult> {
+        prompts.push(req.prompt);
+        return prompts.length === 1
+          ? { ok: true, text: '{"wrong":"MARKER_ZZ9"}', meta: { durationMs: 1 } }
+          : { ok: true, text: '{"n":9}', meta: { durationMs: 1 } };
+      },
+    };
+    const rt = makeRuntime({ adapter, journal });
+
+    const out = await rt.agent("compute", { schema: numSchema });
+    expect(out).toEqual({ n: 9 });
+    expect(prompts.length).toBe(2);
+    // The fresh retry prompt carries the concrete prior output, not just errors.
+    expect(prompts[1]).toContain("MARKER_ZZ9");
+  });
+
+  test("in-session followUp retry stays lean — does NOT re-echo rawText (already in transcript)", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    let followUpPrompt = "";
+    // invalid + a sessionId → the retry takes the in-session followUp path, where
+    // the prior attempt is still in the live transcript, so re-sending it is waste.
+    const adapter: AgentPort = {
+      name: "session-capture",
+      async invoke(): Promise<AgentResult> {
+        return { ok: true, text: '{"wrong":"MARKER_SESS"}', meta: { durationMs: 1, sessionId: "s1" } };
+      },
+      async followUp(_s, prompt): Promise<AgentResult> {
+        followUpPrompt = prompt;
+        return { ok: true, text: '{"n":3}', meta: { durationMs: 1 } };
+      },
+    };
+    const rt = makeRuntime({ adapter, journal });
+
+    const out = await rt.agent("compute", { schema: numSchema });
+    expect(out).toEqual({ n: 3 });
+    expect(followUpPrompt).not.toContain("MARKER_SESS"); // prior output not re-sent
+    expect(followUpPrompt).toContain("required property 'n'"); // errors still carried
+  });
+
   test("with no schema, returns the raw text", async () => {
     const journal = makeJournal({ now: () => 0 });
     const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ text: "plain answer" }] }] });
