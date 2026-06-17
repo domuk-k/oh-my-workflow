@@ -7,7 +7,7 @@
 // fs is reachable directly (this is the IO wiring command, like run.ts); the arg
 // parse is a pure function so the contract is testable without touching disk.
 
-import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -89,6 +89,9 @@ export async function skillCommand(argv: string[], io: SkillIo): Promise<number>
   const destDir = join(base, "skills", SKILL_NAME);
   const dest = join(destDir, "SKILL.md");
   const updating = existsSync(dest);
+  // Clean replace, not an additive copy: drop a prior install first so a file
+  // that was removed from the bundle doesn't linger as stale content.
+  rmSync(destDir, { recursive: true, force: true });
   mkdirSync(destDir, { recursive: true });
   cpSync(srcDir, destDir, { recursive: true });
 

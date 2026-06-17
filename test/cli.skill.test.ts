@@ -68,6 +68,21 @@ describe("skillCommand install", () => {
     expect(b.out()).toContain("updated");
   });
 
+  test("re-install is a clean replace — a file dropped from the bundle is removed", async () => {
+    const home = tmp("omw-home-");
+    const skillDir = srcDir("BODY");
+    writeFileSync(join(skillDir, "extra.md"), "OLD RESOURCE");
+    expect(await skillCommand(["install"], mkIo({ homeDir: home, skillDir }).io)).toBe(0);
+    const destExtra = join(home, ".claude", "skills", "oh-my-workflow", "extra.md");
+    expect(existsSync(destExtra)).toBe(true);
+
+    // drop the resource from the source, re-install → stale copy must be gone
+    rmSync(join(skillDir, "extra.md"));
+    expect(await skillCommand(["install"], mkIo({ homeDir: home, skillDir }).io)).toBe(0);
+    expect(existsSync(destExtra)).toBe(false);
+    expect(existsSync(join(home, ".claude", "skills", "oh-my-workflow", "SKILL.md"))).toBe(true);
+  });
+
   test("--project installs into ./.claude/skills, not home", async () => {
     const home = tmp("omw-home-");
     const cwd = tmp("omw-proj-");
