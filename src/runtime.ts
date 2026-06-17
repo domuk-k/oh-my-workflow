@@ -20,6 +20,8 @@ export type AgentOpts = {
   cwd?: string;
   timeoutMs?: number;
   maxRetries?: number;
+  /** Inherit the host's MCP servers in this node (default false → isolated, fast). */
+  inheritHostMcp?: boolean;
 };
 
 // `prev`/`item` are intentionally `any`: orchestration scripts are plain JS the
@@ -124,6 +126,7 @@ export function makeRuntime(deps: {
               model: opts.model,
               cwd: opts.cwd,
               timeoutMs: opts.timeoutMs,
+              inheritHostMcp: opts.inheritHostMcp,
             });
           } catch (e) {
             // A throw at the adapter boundary IS an adapter failure.
@@ -146,10 +149,29 @@ export function makeRuntime(deps: {
         const gateCall: GateCall = async (_n, feedback) => {
           let r: AgentResult;
           if (feedback && lastSessionId && adapter.followUp) {
-            r = await adapter.followUp(lastSessionId, retryPrompt(prompt, feedback, false));
+            r = await adapter.followUp(lastSessionId, retryPrompt(prompt, feedback, false), opts.cwd);
+            // Resume can fail even when the format hiccup was recoverable (e.g. a
+            // killed/expired session). Don't let a broken resume be terminal —
+            // fall back to a fresh invoke with the error appended (the contract
+            // AgentPort documents for the no-followUp case).
+            if (!r.ok) {
+              r = await adapter.invoke({
+                prompt: retryPrompt(prompt, feedback, true),
+                model: opts.model,
+                cwd: opts.cwd,
+                timeoutMs: opts.timeoutMs,
+                inheritHostMcp: opts.inheritHostMcp,
+              });
+            }
           } else {
             const p = feedback ? retryPrompt(prompt, feedback, true) : prompt;
-            r = await adapter.invoke({ prompt: p, model: opts.model, cwd: opts.cwd, timeoutMs: opts.timeoutMs });
+            r = await adapter.invoke({
+              prompt: p,
+              model: opts.model,
+              cwd: opts.cwd,
+              timeoutMs: opts.timeoutMs,
+              inheritHostMcp: opts.inheritHostMcp,
+            });
           }
           account(r);
           if (r.ok && r.meta.sessionId) lastSessionId = r.meta.sessionId;
