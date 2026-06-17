@@ -136,11 +136,16 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
     invoke(req: InvokeRequest): Promise<AgentResult> {
       const args = ["-p", req.prompt, "--output-format", "json"];
       if (req.model) args.push("--model", req.model);
+      // Isolate the node from the host's MCP servers unless asked otherwise:
+      // booting figma/devtools/etc. on every node is the dominant fan-out latency.
+      if (!req.inheritHostMcp) args.push("--strict-mcp-config");
       return run(args, req.cwd, req.timeoutMs);
     },
-    followUp(sessionId: string, prompt: string): Promise<AgentResult> {
-      const args = ["-p", prompt, "--resume", sessionId, "--output-format", "json"];
-      return run(args);
+    // `cwd` must match the original invoke — claude keys session history by
+    // project directory, so resuming elsewhere yields "No conversation found".
+    followUp(sessionId: string, prompt: string, cwd?: string): Promise<AgentResult> {
+      const args = ["-p", prompt, "--resume", sessionId, "--output-format", "json", "--strict-mcp-config"];
+      return run(args, cwd);
     },
   };
 }

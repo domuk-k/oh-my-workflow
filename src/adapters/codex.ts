@@ -141,9 +141,10 @@ export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
       args.push(req.prompt);
       return run(args, req.cwd, req.timeoutMs);
     },
-    followUp(sessionId: string, prompt: string): Promise<AgentResult> {
+    // `cwd` must match the original invoke so resume finds the session.
+    followUp(sessionId: string, prompt: string, cwd?: string): Promise<AgentResult> {
       const args = ["exec", "resume", sessionId, "--json", "-s", sandbox, prompt];
-      return run(args);
+      return run(args, cwd);
     },
   };
 }

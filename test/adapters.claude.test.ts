@@ -136,6 +136,37 @@ describe("makeClaudeAdapter (injected spawn)", () => {
     expect(calls[0]).toContain("sess-123");
   });
 
+  // Regression: claude keys session history by project directory, so a resume
+  // MUST run in the same cwd as the original invoke or it fails with
+  // "No conversation found". followUp must forward cwd to the spawn opts.
+  test("followUp forwards cwd so --resume finds the session", async () => {
+    const opts: Array<{ cwd?: string } | undefined> = [];
+    const adapter = makeClaudeAdapter({
+      spawn: async (_args, o) => {
+        opts.push(o);
+        return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
+      },
+    });
+    await adapter.followUp!("sess-123", "and again", "/repo/under/review");
+    expect(opts[0]?.cwd).toBe("/repo/under/review");
+  });
+
+  // The node is isolated from the host's MCP servers by default (booting them is
+  // the dominant fan-out latency); inheritHostMcp opts back in.
+  test("invoke adds --strict-mcp-config by default, omits it when inheritHostMcp", async () => {
+    const calls: string[][] = [];
+    const adapter = makeClaudeAdapter({
+      spawn: async (args) => {
+        calls.push(args);
+        return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
+      },
+    });
+    await adapter.invoke({ prompt: "x" });
+    expect(calls[0]).toContain("--strict-mcp-config");
+    await adapter.invoke({ prompt: "x", inheritHostMcp: true });
+    expect(calls[1]).not.toContain("--strict-mcp-config");
+  });
+
   test("a non-zero exit (no JSON) -> ok:false nonzero_exit, never throws", async () => {
     const adapter = makeClaudeAdapter({
       spawn: async () => ({ code: 1, stdout: "", stderr: "boom" }),
