@@ -147,7 +147,9 @@ export async function loadWorkflow(wfPath: string): Promise<LoadedWorkflow> {
 
   const mod = await import(entry);
   if (typeof mod.default !== "function") {
-    throw new Error(`workflow ${wfPath} must default-export a function (rt, args) => result`);
+    throw new Error(
+      `workflow ${wfPath} must default-export a function ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result (legacy (rt, args) still supported)`,
+    );
   }
   return { workflow: mod.default, fake: mod.fake, meta: mod.meta };
 }
@@ -177,6 +179,17 @@ export type RunOutcome = {
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+/** True when a workflow's first param is NOT an object-destructuring pattern,
+ *  i.e. the legacy positional `(rt, args)` shape. Used only to emit a
+ *  deprecation nudge — never to dispatch, since the same object satisfies both
+ *  contracts. A source sniff via Function.prototype.toString; heuristic by
+ *  nature (it can't see through a bound/wrapped fn), but a non-fatal warning is
+ *  the right altitude for a heuristic. */
+function isLegacyShape(fn: Function): boolean {
+  const src = Function.prototype.toString.call(fn);
+  return !/^\s*(async\s+)?function\s*\*?\s*\(\s*\{|^\s*\(\s*\{|^\s*async\s*\(\s*\{/.test(src);
+}
+
 export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunOutcome> {
   let loaded: LoadedWorkflow;
   try {
@@ -199,7 +212,17 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
 
   journal.runStart({ run: runId, wf: opts.wfPath });
   try {
-    const result = await loaded.workflow(rt, opts.args);
+    // The SAME runtime object satisfies both authoring contracts: a legacy
+    // `(rt, args)` script reads `rt.agent`, a new `({ agent }, args)` script
+    // destructures it. No execution-time dispatch — only the deprecation nudge
+    // needs to detect the legacy positional shape.
+    const hooks = rt;
+    if (isLegacyShape(loaded.workflow)) {
+      deps.stderr?.(
+        "omw: deprecation — positional `rt` authoring is deprecated; destructure hooks `({ agent, ... }, args)`. Removed in 0.5. Run `omw codemod`.",
+      );
+    }
+    const result = await loaded.workflow(hooks, opts.args);
     // internal_error is an AUTHOR bug (e.g. a JSON Schema that won't compile),
     // not a flaky node — the null-contract absorbs it so the run completes, but
     // we escalate to exit 4 so a caller (or authoring agent) doesn't read the

@@ -229,6 +229,48 @@ describe("runWorkflow", () => {
   });
 });
 
+describe("runWorkflow — authoring surface (destructured DI + legacy bridge)", () => {
+  test("a destructured-DI workflow runs and a legacy (rt,args) workflow runs with a deprecation notice", async () => {
+    const errs: string[] = [];
+    const di = {
+      workflow: async ({ agent }: any, args: any) => ({ di: await agent("go"), args }),
+      fake: { default: { text: "ok" as const } },
+    };
+    const out1 = await runWorkflow(
+      { wfPath: "x", agent: "fake", args: 7, pretty: false } as any,
+      {
+        loadWorkflow: async () => di as any,
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+        stderr: (s) => errs.push(s),
+      },
+    );
+    expect(out1.exitCode).toBe(0);
+    expect(JSON.parse(out1.stdout!)).toEqual({ di: "ok", args: 7 });
+    expect(errs.join("")).not.toContain("deprecat");
+
+    const legacy = {
+      workflow: async (rt: any) => ({ leg: await rt.agent("go") }),
+      fake: { default: { text: "ok" as const } },
+    };
+    const out2 = await runWorkflow(
+      { wfPath: "x", agent: "fake", args: null, pretty: false } as any,
+      {
+        loadWorkflow: async () => legacy as any,
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+        stderr: (s) => errs.push(s),
+      },
+    );
+    expect(out2.exitCode).toBe(0);
+    expect(errs.join("")).toContain("deprecat");
+  });
+});
+
 describe("runWorkflow — resume passthrough", () => {
   test("deps.resume serves a cached hit: the adapter is never invoked", async () => {
     const workflow = async (rt: any) => {
