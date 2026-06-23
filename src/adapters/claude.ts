@@ -65,6 +65,9 @@ export type ClaudeAdapterDeps = {
   spawn?: ClaudeSpawn;
   /** Binary name/path; defaults to "claude" on PATH. */
   bin?: string;
+  /** Diagnostic sink for honest-scope notices (e.g. an opt with no faithful CLI
+   *  flag was dropped). Defaults to console.error. */
+  warn?: (msg: string) => void;
 };
 
 /** Default spawn over Bun.spawn. Kills the child after timeoutMs and flags it so
@@ -96,6 +99,15 @@ function defaultSpawn(bin: string): ClaudeSpawn {
 
 export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
   const spawn = deps.spawn ?? defaultSpawn(deps.bin ?? "claude");
+  const warn = deps.warn ?? ((m: string) => console.error(m));
+  // One-time per field: claude -p has no faithful flag for these yet, so they are
+  // dropped rather than silently honored. Warn once so a fan-out isn't spammed.
+  const warnedFields = new Set<string>();
+  const warnUnmapped = (field: string, value: unknown) => {
+    if (warnedFields.has(field)) return;
+    warnedFields.add(field);
+    warn(`omw(claude): \`${field}\` (=${String(value)}) has no claude -p flag; dropped for this run.`);
+  };
 
   async function run(args: string[], cwd?: string, timeoutMs?: number): Promise<AgentResult> {
     let res: ClaudeSpawnResult;
@@ -137,6 +149,8 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
     invoke(req: InvokeRequest): Promise<AgentResult> {
       const args = ["-p", req.prompt, "--output-format", "json"];
       if (req.model) args.push("--model", req.model);
+      if (req.effort !== undefined) warnUnmapped("effort", req.effort);
+      if (req.agentType !== undefined) warnUnmapped("agentType", req.agentType);
       // Isolate the node from the host's MCP servers unless asked otherwise:
       // booting figma/devtools/etc. on every node is the dominant fan-out latency.
       if (!req.inheritMcp) args.push("--strict-mcp-config");

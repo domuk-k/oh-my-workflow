@@ -33,6 +33,10 @@ export type AgentOpts = {
   maxRetries?: number;
   /** Inherit the host's MCP servers in this node (default false → isolated, fast). */
   inheritMcp?: boolean;
+  /** Reasoning-effort hint for this node (adapter maps it where supported). */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /** Cross-vendor node profile (named agent persona) for this node. */
+  agentType?: string;
 };
 
 // `prev`/`item` are intentionally `any`: orchestration scripts are plain JS the
@@ -167,6 +171,8 @@ export function makeRuntime(deps: {
           cwd: opts.cwd,
           timeoutMs: opts.timeoutMs,
           inheritMcp: opts.inheritMcp,
+          effort: opts.effort,
+          agentType: opts.agentType,
         });
 
       try {

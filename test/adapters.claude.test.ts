@@ -128,6 +128,27 @@ describe("makeClaudeAdapter (injected spawn)", () => {
     expect(calls[0]).toContain("claude-opus-4-8");
   });
 
+  test("effort/agentType are not pushed as claude args (no faithful CLI flag) and warn once", async () => {
+    const calls: string[][] = [];
+    const warns: string[] = [];
+    const adapter = makeClaudeAdapter({
+      spawn: async (args) => {
+        calls.push(args);
+        return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
+      },
+      warn: (m) => warns.push(m),
+    });
+    await adapter.invoke({ prompt: "x", effort: "high", agentType: "Explore" });
+    await adapter.invoke({ prompt: "y", effort: "low" });
+    // Honest-scope: claude -p has no effort/agentType flag, so they are dropped.
+    expect(calls[0]).not.toContain("--effort");
+    expect(calls[0]!.join(" ")).not.toContain("high");
+    expect(calls[0]!.join(" ")).not.toContain("Explore");
+    // Warned, but only once per distinct field across invocations.
+    expect(warns.filter((w) => w.includes("effort")).length).toBe(1);
+    expect(warns.filter((w) => w.includes("agentType")).length).toBe(1);
+  });
+
   test("followUp passes --resume <sessionId> to continue the session", async () => {
     const calls: string[][] = [];
     const adapter = makeClaudeAdapter({

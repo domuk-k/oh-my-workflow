@@ -43,6 +43,12 @@ export type InvokeRequest = {
    *  node rarely needs them. Honored by the claude adapter (--strict-mcp-config);
    *  the codex adapter does not yet implement isolation, so it is a no-op there. */
   inheritMcp?: boolean;
+  /** Reasoning-effort hint, passed through to adapters that support it. Adapters
+   *  with no faithful flag (e.g. claude -p today) drop it and warn once. */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /** Cross-vendor node profile (a named agent persona). Adapters map it where
+   *  they can; otherwise drop + warn once (honest-scope). */
+  agentType?: string;
 };
 
 /** The subset of InvokeRequest a resume turn must mirror from its original
