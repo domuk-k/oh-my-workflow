@@ -415,6 +415,31 @@ describe("runtime.agent — resume full-prefix cache (parallel fan-out)", () => 
   });
 });
 
+describe("runtime — model precedence (opts > phase > meta default)", () => {
+  test("resolves the effective model from the opts > phase > meta chain", async () => {
+    const seen: (string | undefined)[] = [];
+    const adapter: AgentPort = {
+      name: "cap",
+      async invoke(req) {
+        seen.push(req.model);
+        return { ok: true, text: "x", meta: { durationMs: 0 } };
+      },
+    };
+    const journal = makeJournal({ now: () => 0 });
+    const rt = makeRuntime({
+      adapter,
+      journal,
+      meta: { model: "default-m", phases: [{ title: "A", model: "phase-a" }] },
+    });
+    rt.phase("A");
+    await rt.agent("1"); // phase A has a model → phase-a
+    await rt.agent("2", { model: "opt-m" }); // explicit opts wins
+    rt.phase("B"); // no phase model → meta default
+    await rt.agent("3");
+    expect(seen).toEqual(["phase-a", "opt-m", "default-m"]);
+  });
+});
+
 describe("runtime.budget — token accounting", () => {
   test("budget.spent sums node output tokens; remaining counts down; Infinity when unset", async () => {
     const journal = makeJournal({ now: () => 0 });

@@ -217,6 +217,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
     concurrency: opts.concurrency,
     resume: deps.resume,
     budgetState,
+    meta: loaded.meta,
   });
 
   // workflow(ref, args?) runs another workflow inline as a sub-step, sharing the
@@ -233,6 +234,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
         concurrency: opts.concurrency,
         resume: deps.resume,
         budgetState,
+        meta: childLoaded.meta,
       });
       const childHooks = { ...childRt, workflow: makeWorkflowHook(depth + 1) };
       return await childLoaded.workflow(childHooks as unknown as Runtime, childArgs);

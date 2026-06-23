@@ -124,6 +124,9 @@ export function makeRuntime(deps: {
   /** Shared spend accumulator. When omitted, a local one is created; a nested
    *  workflow() passes the parent's so the pool is shared across the run. */
   budgetState?: BudgetState;
+  /** The workflow's meta, used to resolve the effective model per node along the
+   *  `opts.model > phase model > meta.model` chain. */
+  meta?: WorkflowMeta;
 }): Runtime {
   const { adapter, journal, resume } = deps;
   const limit = makeLimiter(deps.concurrency ?? 4);
@@ -132,9 +135,19 @@ export function makeRuntime(deps: {
   const budgetTotal = deps.budget ?? null;
   const budgetState: BudgetState = deps.budgetState ?? { spent: 0 };
 
+  // Effective model along the precedence chain opts > phase > meta default.
+  // Resolved per node so a phase or meta default applies without the script
+  // repeating `model` on every agent() call.
+  const resolveModel = (opts: AgentOpts, phase: string | undefined): string | undefined => {
+    if (opts.model !== undefined) return opts.model;
+    const phaseModel = phase ? deps.meta?.phases?.find((p) => p.title === phase)?.model : undefined;
+    return phaseModel ?? deps.meta?.model;
+  };
+
   async function agent(prompt: string, opts: AgentOpts = {}): Promise<unknown | null> {
     const call = ++callCounter;
     const phase = opts.phase ?? currentPhase;
+    const model = resolveModel(opts, phase);
     const pHash = promptHash(prompt);
     const oHash = optsHash(opts);
     journal.agentStart({
@@ -167,7 +180,7 @@ export function makeRuntime(deps: {
       const invokeFresh = (p: string) =>
         adapter.invoke({
           prompt: p,
-          model: opts.model,
+          model,
           cwd: opts.cwd,
           timeoutMs: opts.timeoutMs,
           inheritMcp: opts.inheritMcp,
