@@ -7,6 +7,7 @@ import { runCommand } from "./run";
 import { replayCommand } from "./replay";
 import { validateCommand } from "./validate";
 import { skillCommand } from "./skill";
+import { codemodCommand } from "./codemod";
 
 const io = {
   stdout: (s: string) => process.stdout.write(s),
@@ -24,6 +25,8 @@ async function main(argv: string[]): Promise<number> {
       return validateCommand(rest, io);
     case "skill":
       return skillCommand(rest, io);
+    case "codemod":
+      return codemodCommand(rest, io);
     default:
       io.stderr(
         "usage: omw <command>\n\n" +
@@ -31,7 +34,8 @@ async function main(argv: string[]): Promise<number> {
           "  run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]\n" +
           "  replay <journal.jsonl> [--json]\n" +
           "  validate <workflow> [--json]\n" +
-          "  skill install [--project]   install the omw authoring skill for your coding agent\n\n" +
+          "  skill install [--project]   install the omw authoring skill for your coding agent\n" +
+          "  codemod <file> [--to-di] [--write]   migrate a legacy (rt, args) workflow to destructured DI\n\n" +
           "free demo (no API key):  omw run examples/deep-research --agent fake\n",
       );
       return cmd === undefined ? 2 : 2;
