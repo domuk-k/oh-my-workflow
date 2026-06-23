@@ -18,6 +18,9 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
 export function parseClaudeResult(raw: unknown): AgentResult {
   const j = raw as Record<string, unknown> | null;
   const durationMs = Number(j?.duration_ms) || 0;
+  // Tokens are surfaced on success AND failure: an error/refusal envelope still
+  // carries `usage`, so budget accounting counts a failed node's real spend.
+  const outputTokens = (j?.usage as { output_tokens?: number } | undefined)?.output_tokens;
 
   // A safety/decline refusal (stop_reason "refusal") is a journaled DECLINE — not
   // a crash, and not a real answer. Classify it FIRST, before the is_error/subtype
@@ -33,14 +36,14 @@ export function parseClaudeResult(raw: unknown): AgentResult {
       ok: false,
       kind: "refusal",
       stderr: `refusal${category ? `(${category})` : ""}: ${detail}`.trim(),
-      meta: { durationMs },
+      meta: { durationMs, outputTokens },
     };
   }
 
   if (!j || j.type !== "result" || j.is_error === true || j.subtype !== "success") {
     const subtype = (j?.subtype ?? j?.type ?? "unknown") as string;
     const detail = typeof j?.result === "string" ? j.result : "";
-    return { ok: false, kind: "nonzero_exit", stderr: `${subtype}: ${detail}`.trim(), meta: { durationMs } };
+    return { ok: false, kind: "nonzero_exit", stderr: `${subtype}: ${detail}`.trim(), meta: { durationMs, outputTokens } };
   }
 
   return {
@@ -50,7 +53,7 @@ export function parseClaudeResult(raw: unknown): AgentResult {
       durationMs,
       sessionId: j.session_id as string | undefined,
       costUsd: j.total_cost_usd as number | undefined,
-      outputTokens: (j.usage as { output_tokens?: number } | undefined)?.output_tokens,
+      outputTokens,
     },
   };
 }

@@ -226,7 +226,10 @@ export function makeRuntime(deps: {
       let durationMs = 0;
       const account = (r: AgentResult) => {
         durationMs += r.ok ? r.meta.durationMs : (r.meta?.durationMs ?? 0);
-        if (r.ok) budgetState.spent += r.meta.outputTokens ?? 0;
+        // Count tokens whether the node succeeded or failed: a failed node that
+        // still reported `usage` (error/refusal envelope) consumed real budget,
+        // so a loop on a failing node trips the ceiling instead of spinning.
+        budgetState.spent += (r.ok ? r.meta.outputTokens : r.meta?.outputTokens) ?? 0;
       };
       // A fresh node invocation carrying this call's options. Built in one place
       // so the next InvokeRequest field is threaded once, not per call site.

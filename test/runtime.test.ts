@@ -531,6 +531,18 @@ describe("runtime.budget — token accounting", () => {
     await expect(rt.agent("second")).rejects.toBeInstanceOf(BudgetExceededError);
   });
 
+  test("failed nodes that report output tokens still count toward budget (a failing-node loop terminates)", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    // A node that FAILS but reports tokens (e.g. claude error envelope with usage,
+    // or a refusal) — its spend must count, else a loop on it never trips the ceiling.
+    const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ fail: "nonzero_exit", outputTokens: 60 }] }] });
+    const rt = makeRuntime({ adapter, journal, budget: 50 });
+    const r = await rt.agent("first"); // fails → null, but spends 60 ≥ 50
+    expect(r).toBe(null);
+    expect(rt.budget.spent()).toBe(60);
+    await expect(rt.agent("second")).rejects.toBeInstanceOf(BudgetExceededError);
+  });
+
   test("a budget throw inside parallel() is swallowed to null (matches native)", async () => {
     const journal = makeJournal({ now: () => 0 });
     const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ text: "x", outputTokens: 99 }] }] });

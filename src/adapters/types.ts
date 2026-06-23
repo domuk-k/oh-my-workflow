@@ -26,7 +26,10 @@ export type AgentResult =
       ok: false;
       kind: AgentFailureKind;
       stderr?: string;
-      meta?: { durationMs: number };
+      /** A failure can still report tokens (an error/refusal envelope often
+       *  carries `usage`), so budget accounting counts it. A token-less failure
+       *  (e.g. a killed timeout) simply omits it. */
+      meta?: { durationMs: number; outputTokens?: number };
     };
 
 export type InvokeRequest = {
