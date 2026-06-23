@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { makeRuntime } from "../src/runtime";
+import { makeRuntime, BudgetExceededError } from "../src/runtime";
 import { makeJournal, type JournalEvent } from "../src/journal";
 import { makeFakeAdapter } from "../src/adapters/fake";
 import { makeResumeIndex } from "../src/resume";
@@ -451,5 +451,22 @@ describe("runtime.budget — token accounting", () => {
     expect(rt.budget.remaining()).toBe(70);
     const rt2 = makeRuntime({ adapter, journal });
     expect(rt2.budget.remaining()).toBe(Infinity);
+  });
+
+  test("agent() throws BudgetExceededError once spent >= total (the one null-contract exception)", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ text: "x", outputTokens: 60 }] }] });
+    const rt = makeRuntime({ adapter, journal, budget: 50 });
+    await rt.agent("first"); // spends 60 ≥ 50 after this
+    await expect(rt.agent("second")).rejects.toBeInstanceOf(BudgetExceededError);
+  });
+
+  test("a budget throw inside parallel() is swallowed to null (matches native)", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ text: "x", outputTokens: 99 }] }] });
+    const rt = makeRuntime({ adapter, journal, budget: 1 });
+    await rt.agent("warmup").catch(() => {});
+    const res = await rt.parallel([() => rt.agent("a")]);
+    expect(res).toEqual([null]);
   });
 });

@@ -87,6 +87,18 @@ export function makeLimiter(max: number) {
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+/** The ONE documented exception to the null-contract: when a token budget is set
+ *  and already exhausted, agent() throws this instead of returning null, so a
+ *  budget-bounded loop terminates instead of silently spinning out null nodes.
+ *  It is thrown OUTSIDE the per-node try, so it propagates; a throw that lands
+ *  inside parallel()/pipeline() is still swallowed to null (matches native). */
+export class BudgetExceededError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BudgetExceededError";
+  }
+}
+
 // Cap the echoed prior output so a huge malformed dump can't blow the fresh prompt.
 const RETRY_RAWTEXT_CAP = 4000;
 
@@ -167,6 +179,13 @@ export function makeRuntime(deps: {
         journal.agentEnd({ call, ok: true, result: hit.value, durationMs: 0, cached: true });
         return hit.value;
       }
+    }
+
+    // Budget ceiling: checked AFTER the resume short-circuit (a cached hit costs
+    // nothing) and OUTSIDE limit()'s try, so it propagates as the one sanctioned
+    // null-contract exception rather than being swallowed to null.
+    if (budgetTotal != null && budgetState.spent >= budgetTotal) {
+      throw new BudgetExceededError(`budget exhausted: ${budgetState.spent}/${budgetTotal} tokens`);
     }
 
     return limit(async () => {
