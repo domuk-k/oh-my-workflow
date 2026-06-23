@@ -40,12 +40,21 @@ export type AgentOpts = {
 // without fighting the type system. The runtime treats every value opaquely.
 export type Stage = (prev: any, item: any, index: number) => unknown | Promise<unknown>;
 
+/** Shared, mutable token-spend accumulator. Lives outside makeRuntime so a
+ *  parent and any nested workflow() child can point at the SAME counter — the
+ *  token pool is shared across the whole run, not per-runtime. */
+export type BudgetState = { spent: number };
+
 export type Runtime = {
   agent(prompt: string, opts?: AgentOpts): Promise<unknown | null>;
   pipeline(items: unknown[], ...stages: Stage[]): Promise<unknown[]>;
   parallel(thunks: Array<() => Promise<unknown>>): Promise<unknown[]>;
   phase(title: string): void;
   log(msg: string): void;
+  /** Token budget view. `total` is the ceiling (null = unbounded); `spent()`
+   *  reads the shared accumulator; `remaining()` is `total - spent` (Infinity
+   *  when unbounded). The ceiling is enforced in agent() (BudgetExceededError). */
+  budget: { total: number | null; spent(): number; remaining(): number };
 };
 
 /** Bounded-concurrency gate: at most `max` bodies run at once; the rest queue.
@@ -106,11 +115,18 @@ export function makeRuntime(deps: {
    *  the longest-unchanged-prefix resume model. A miss (incl. a prior failure)
    *  runs live, so resume only re-executes failed/changed nodes. */
   resume?: ResumeIndex;
+  /** Token ceiling for the run (null/undefined = unbounded). */
+  budget?: number | null;
+  /** Shared spend accumulator. When omitted, a local one is created; a nested
+   *  workflow() passes the parent's so the pool is shared across the run. */
+  budgetState?: BudgetState;
 }): Runtime {
   const { adapter, journal, resume } = deps;
   const limit = makeLimiter(deps.concurrency ?? 4);
   let callCounter = 0;
   let currentPhase: string | undefined;
+  const budgetTotal = deps.budget ?? null;
+  const budgetState: BudgetState = deps.budgetState ?? { spent: 0 };
 
   async function agent(prompt: string, opts: AgentOpts = {}): Promise<unknown | null> {
     const call = ++callCounter;
@@ -140,6 +156,7 @@ export function makeRuntime(deps: {
       let durationMs = 0;
       const account = (r: AgentResult) => {
         durationMs += r.ok ? r.meta.durationMs : (r.meta?.durationMs ?? 0);
+        if (r.ok) budgetState.spent += r.meta.outputTokens ?? 0;
       };
       // A fresh node invocation carrying this call's options. Built in one place
       // so the next InvokeRequest field is threaded once, not per call site.
@@ -277,5 +294,10 @@ export function makeRuntime(deps: {
       journal.phase(title);
     },
     log: (msg: string) => journal.log(msg),
+    budget: {
+      total: budgetTotal,
+      spent: () => budgetState.spent,
+      remaining: () => (budgetTotal == null ? Infinity : budgetTotal - budgetState.spent),
+    },
   };
 }

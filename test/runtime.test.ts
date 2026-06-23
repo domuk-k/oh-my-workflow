@@ -414,3 +414,17 @@ describe("runtime.agent — resume full-prefix cache (parallel fan-out)", () => 
     expect(ends.map((e) => e.cached ?? false)).toEqual([true, true, true, true, false]);
   });
 });
+
+describe("runtime.budget — token accounting", () => {
+  test("budget.spent sums node output tokens; remaining counts down; Infinity when unset", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ text: "x", outputTokens: 30 }] }] });
+    const rt = makeRuntime({ adapter, journal, budget: 100 });
+    expect(rt.budget.total).toBe(100);
+    await rt.agent("a");
+    expect(rt.budget.spent()).toBe(30);
+    expect(rt.budget.remaining()).toBe(70);
+    const rt2 = makeRuntime({ adapter, journal });
+    expect(rt2.budget.remaining()).toBe(Infinity);
+  });
+});
