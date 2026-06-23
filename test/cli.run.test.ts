@@ -461,6 +461,39 @@ describe("runWorkflow — --strict determinism sandbox", () => {
       globalThis.Date = REAL_DATE;
     }
   });
+
+  test("withStrict restore is fault-tolerant: a global frozen mid-run does not strand the OTHER global", async () => {
+    const REAL_DATE = globalThis.Date;
+    const REAL_RANDOM = Math.random;
+    try {
+      const loaded = {
+        // Inside the run, freeze globalThis.Date so the finally's Date-restore
+        // throws. The Math.random restore must still happen (independent restore).
+        workflow: async ({ agent }: any) => {
+          Object.defineProperty(globalThis, "Date", { value: globalThis.Date, writable: false, configurable: true });
+          return { x: await agent("go") };
+        },
+        fake: { default: { text: "ok" as const } },
+      };
+      await runWorkflow(
+        { wfPath: "w", agent: "fake", args: undefined, pretty: false, strict: true } as any,
+        {
+          loadWorkflow: async () => loaded as any,
+          resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+          journalSink: () => {},
+          now: () => 0,
+          runId: () => "t",
+        },
+      );
+      // Date restore threw (it's frozen), but Math.random must NOT be left as the
+      // throwing boom — the restore of the other global must still run.
+      expect(() => Math.random()).not.toThrow();
+      expect(Math.random).toBe(REAL_RANDOM);
+    } finally {
+      Object.defineProperty(globalThis, "Date", { value: REAL_DATE, writable: true, configurable: true });
+      Object.defineProperty(Math, "random", { value: REAL_RANDOM, writable: true, configurable: true });
+    }
+  });
 });
 
 describe("runWorkflow — resume passthrough", () => {

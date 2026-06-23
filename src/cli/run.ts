@@ -258,8 +258,16 @@ async function withStrict<T>(strict: boolean | undefined, fn: () => T | Promise<
   } finally {
     strictDepth--;
     if (strictDepth === 0) {
-      globalThis.Date = strictSavedDate;
-      Math.random = strictSavedRandom;
+      // Restore each global independently: if one assignment throws (the global
+      // was frozen mid-run — the same hostile env this guards against), the other
+      // must still be restored, or a throwing patch leaks process-wide. Swallow
+      // the restore error so it can't mask fn()'s real result/error either.
+      try {
+        globalThis.Date = strictSavedDate;
+      } catch {}
+      try {
+        Math.random = strictSavedRandom;
+      } catch {}
     }
   }
 }
