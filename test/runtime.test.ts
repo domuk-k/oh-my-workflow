@@ -469,6 +469,24 @@ describe("runtime — model precedence (opts > phase > meta default)", () => {
     await rt.agent("3");
     expect(seen).toEqual(["phase-a", "opt-m", "default-m"]);
   });
+
+  test("a malformed meta.phases (non-array) does not crash the run — model falls back", async () => {
+    const seen: (string | undefined)[] = [];
+    const adapter: AgentPort = {
+      name: "cap",
+      async invoke(req) {
+        seen.push(req.model);
+        return { ok: true, text: "x", meta: { durationMs: 0 } };
+      },
+    };
+    const journal = makeJournal({ now: () => 0 });
+    // Author typo: phases is a string, not an array of { title, model }.
+    const rt = makeRuntime({ adapter, journal, meta: { model: "default-m", phases: "scan" as any } });
+    rt.phase("scan");
+    const r = await rt.agent("1"); // must not throw on .find of a non-array
+    expect(r).toBe("x");
+    expect(seen).toEqual(["default-m"]); // falls back to meta.model
+  });
 });
 
 describe("runtime — isolation:'worktree'", () => {

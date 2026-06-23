@@ -179,7 +179,11 @@ export function makeRuntime(deps: {
   // repeating `model` on every agent() call.
   const resolveModel = (opts: AgentOpts, phase: string | undefined): string | undefined => {
     if (opts.model !== undefined) return opts.model;
-    const phaseModel = phase ? deps.meta?.phases?.find((p) => p.title === phase)?.model : undefined;
+    // `?.` guards null/undefined but NOT a wrong type — an author typo like
+    // `phases: "scan"` would make `.find` throw. Array.isArray closes that gap so
+    // a malformed meta degrades to the default model instead of killing the run.
+    const phases = deps.meta?.phases;
+    const phaseModel = phase && Array.isArray(phases) ? phases.find((p) => p.title === phase)?.model : undefined;
     return phaseModel ?? deps.meta?.model;
   };
 
