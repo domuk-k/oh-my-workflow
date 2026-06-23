@@ -26,6 +26,9 @@ export type RunOptions = {
   /** Opt-in determinism sandbox: forbid Date/Math.random in the script body so a
    *  run is reproducible (matches native dynamic-workflow's freeze-throw). */
   strict?: boolean;
+  /** Token ceiling for the whole run; agent() throws BudgetExceededError once the
+   *  shared spend reaches it. */
+  budget?: number;
 };
 
 export type ParseResult =
@@ -39,6 +42,8 @@ export function parseRunArgs(argv: string[]): ParseResult {
   let concurrency: number | undefined;
   let pretty = false;
   let resume: string | undefined;
+  let budget: number | undefined;
+  let strict = false;
 
   for (let i = 0; i < argv.length; i++) {
     const tok = argv[i]!;
@@ -64,8 +69,20 @@ export function parseRunArgs(argv: string[]): ParseResult {
         concurrency = n;
         break;
       }
+      case "--budget": {
+        const raw = argv[++i];
+        const n = Number(raw);
+        if (raw === undefined || !Number.isInteger(n) || n < 1) {
+          return { ok: false, error: `--budget must be a positive integer, got: ${raw}` };
+        }
+        budget = n;
+        break;
+      }
       case "--pretty":
         pretty = true;
+        break;
+      case "--strict":
+        strict = true;
         break;
       case "--resume":
         resume = argv[++i];
@@ -80,7 +97,7 @@ export function parseRunArgs(argv: string[]): ParseResult {
   if (wfPath === undefined) return { ok: false, error: "missing workflow path" };
   if (agent === undefined) return { ok: false, error: "missing --agent <name>" };
 
-  return { ok: true, value: { wfPath, agent, args, concurrency, pretty, resume } };
+  return { ok: true, value: { wfPath, agent, args, concurrency, pretty, resume, budget, strict } };
 }
 
 // ── workflow execution ──────────────────────────────────────────────────────
@@ -250,6 +267,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
     journal,
     concurrency: opts.concurrency,
     resume: deps.resume,
+    budget: opts.budget,
     budgetState,
     meta: loaded.meta,
   });
@@ -267,6 +285,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
         journal,
         concurrency: opts.concurrency,
         resume: deps.resume,
+        budget: opts.budget,
         budgetState,
         meta: childLoaded.meta,
       });
@@ -373,7 +392,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   if (!parsed.ok) {
     io.stderr(JSON.stringify({ error: "usage", message: parsed.error }));
     io.stderr(
-      "\nusage: omw run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--resume <journal.jsonl>] [--pretty]",
+      "\nusage: omw run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]",
     );
     return 2;
   }

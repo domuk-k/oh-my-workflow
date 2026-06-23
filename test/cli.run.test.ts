@@ -63,7 +63,22 @@ describe("parseRunArgs", () => {
       args: { q: "x" },
       concurrency: 8,
       pretty: true,
+      strict: false,
     });
+  });
+
+  test("parses --budget (positive int) and --strict (boolean)", () => {
+    const r = parseRunArgs(["w", "--agent", "fake", "--budget", "5000", "--strict"]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.value.budget).toBe(5000);
+    expect(r.value.strict).toBe(true);
+  });
+
+  test("--budget must be a positive integer", () => {
+    expect(parseRunArgs(["w", "--agent", "fake", "--budget", "0"]).ok).toBe(false);
+    expect(parseRunArgs(["w", "--agent", "fake", "--budget", "x"]).ok).toBe(false);
+    expect(parseRunArgs(["w", "--agent", "fake", "--budget"]).ok).toBe(false);
   });
 
   test("parses --resume <journal> into RunOptions.resume", () => {
@@ -322,6 +337,35 @@ describe("runWorkflow — authoring surface (destructured DI + legacy bridge)", 
     );
     expect(out.exitCode).toBe(1);
     expect((out.error as any).message).toContain("one level");
+  });
+});
+
+describe("runWorkflow — --budget halts a loop", () => {
+  test("a budget-unbounded loop terminates once the ceiling is hit (BudgetExceededError → exit 1)", async () => {
+    // A loop that spends until the budget throws — proving the ceiling is wired
+    // from the CLI option through makeRuntime to agent().
+    const loaded = {
+      workflow: async ({ agent }: any) => {
+        let n = 0;
+        while (true) {
+          await agent(`step ${n++}`); // each spends 40; throws once spent >= 100
+        }
+      },
+      fake: { default: { text: "x" as const, outputTokens: 40 } },
+    };
+    const out = await runWorkflow(
+      { wfPath: "w", agent: "fake", args: undefined, pretty: false, budget: 100 } as any,
+      {
+        loadWorkflow: async () => loaded as any,
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+      },
+    );
+    expect(out.exitCode).toBe(1);
+    expect((out.error as any).error).toBe("script_error");
+    expect((out.error as any).message).toContain("budget exhausted");
   });
 });
 
