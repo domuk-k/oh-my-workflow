@@ -2,7 +2,7 @@
 // surface a stranger types is fixed here before any orchestration exists.
 
 import { test, expect, describe } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseRunArgs, runCommand, runWorkflow, resolveAdapter } from "../src/cli/run";
@@ -63,7 +63,22 @@ describe("parseRunArgs", () => {
       args: { q: "x" },
       concurrency: 8,
       pretty: true,
+      strict: false,
     });
+  });
+
+  test("parses --budget (positive int) and --strict (boolean)", () => {
+    const r = parseRunArgs(["w", "--agent", "fake", "--budget", "5000", "--strict"]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.value.budget).toBe(5000);
+    expect(r.value.strict).toBe(true);
+  });
+
+  test("--budget must be a positive integer", () => {
+    expect(parseRunArgs(["w", "--agent", "fake", "--budget", "0"]).ok).toBe(false);
+    expect(parseRunArgs(["w", "--agent", "fake", "--budget", "x"]).ok).toBe(false);
+    expect(parseRunArgs(["w", "--agent", "fake", "--budget"]).ok).toBe(false);
   });
 
   test("parses --resume <journal> into RunOptions.resume", () => {
@@ -229,6 +244,283 @@ describe("runWorkflow", () => {
   });
 });
 
+describe("runWorkflow — authoring surface (destructured DI + legacy bridge)", () => {
+  test("a destructured-DI workflow runs and a legacy (rt,args) workflow runs with a deprecation notice", async () => {
+    const errs: string[] = [];
+    const di = {
+      workflow: async ({ agent }: any, args: any) => ({ di: await agent("go"), args }),
+      fake: { default: { text: "ok" as const } },
+    };
+    const out1 = await runWorkflow(
+      { wfPath: "x", agent: "fake", args: 7, pretty: false } as any,
+      {
+        loadWorkflow: async () => di as any,
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+        stderr: (s) => errs.push(s),
+      },
+    );
+    expect(out1.exitCode).toBe(0);
+    expect(JSON.parse(out1.stdout!)).toEqual({ di: "ok", args: 7 });
+    expect(errs.join("")).not.toContain("deprecat");
+
+    const legacy = {
+      workflow: async (rt: any) => ({ leg: await rt.agent("go") }),
+      fake: { default: { text: "ok" as const } },
+    };
+    const out2 = await runWorkflow(
+      { wfPath: "x", agent: "fake", args: null, pretty: false } as any,
+      {
+        loadWorkflow: async () => legacy as any,
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+        stderr: (s) => errs.push(s),
+      },
+    );
+    expect(out2.exitCode).toBe(0);
+    expect(errs.join("")).toContain("deprecat");
+  });
+
+  test("a NAMED destructured-DI workflow is not misflagged as legacy (no deprecation)", async () => {
+    const errs: string[] = [];
+    // `function deepResearch({ agent }, args)` — named + destructured (the shipped
+    // example's shape). Must not trip the legacy-shape sniff.
+    const named = {
+      workflow: async function deepResearch({ agent }: any, args: any) {
+        return { x: await agent("go"), args };
+      },
+      fake: { default: { text: "ok" as const } },
+    };
+    const out = await runWorkflow(
+      { wfPath: "x", agent: "fake", args: 1, pretty: false } as any,
+      {
+        loadWorkflow: async () => named as any,
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+        stderr: (s) => errs.push(s),
+      },
+    );
+    expect(out.exitCode).toBe(0);
+    expect(errs.join("")).not.toContain("deprecat");
+  });
+
+  test("workflow() runs a nested child (sharing the parent adapter) and returns its value", async () => {
+    const child = {
+      workflow: async ({ agent }: any, a: any) => ({ child: await agent("c"), got: a }),
+      fake: {},
+    };
+    const parent = {
+      workflow: async ({ workflow }: any) => ({ nested: await workflow({ scriptPath: "child" }, 9) }),
+      fake: {
+        rules: [
+          { match: (p: string) => p === "c", responses: [{ text: "kid" as const }] },
+          { match: () => true, responses: [{ text: "P" as const }] },
+        ],
+      },
+    };
+    const byPath: Record<string, any> = { parent, child };
+    const out = await runWorkflow(
+      { wfPath: "parent", agent: "fake", args: null, pretty: false } as any,
+      {
+        loadWorkflow: async (p: string) => byPath[p],
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+      },
+    );
+    expect(out.exitCode).toBe(0);
+    expect(JSON.parse(out.stdout!)).toEqual({ nested: { child: "kid", got: 9 } });
+  });
+
+  test("workflow() nesting is one level only — a grandchild call throws", async () => {
+    const grandchild = { workflow: async () => ({}), fake: {} };
+    const child = {
+      workflow: async ({ workflow }: any) => ({ deep: await workflow({ scriptPath: "grandchild" }) }),
+      fake: {},
+    };
+    const parent = {
+      workflow: async ({ workflow }: any) => ({ nested: await workflow({ scriptPath: "child" }) }),
+      fake: { default: { text: "x" as const } },
+    };
+    const byPath: Record<string, any> = { parent, child, grandchild };
+    const out = await runWorkflow(
+      { wfPath: "parent", agent: "fake", args: null, pretty: false } as any,
+      {
+        loadWorkflow: async (p: string) => byPath[p],
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+      },
+    );
+    expect(out.exitCode).toBe(1);
+    expect((out.error as any).message).toContain("one level");
+  });
+});
+
+describe("runWorkflow — --budget halts a loop", () => {
+  test("a budget-unbounded loop terminates once the ceiling is hit (BudgetExceededError → exit 1)", async () => {
+    // A loop that spends until the budget throws — proving the ceiling is wired
+    // from the CLI option through makeRuntime to agent().
+    const loaded = {
+      workflow: async ({ agent }: any) => {
+        let n = 0;
+        while (true) {
+          await agent(`step ${n++}`); // each spends 40; throws once spent >= 100
+        }
+      },
+      fake: { default: { text: "x" as const, outputTokens: 40 } },
+    };
+    const out = await runWorkflow(
+      { wfPath: "w", agent: "fake", args: undefined, pretty: false, budget: 100 } as any,
+      {
+        loadWorkflow: async () => loaded as any,
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+      },
+    );
+    expect(out.exitCode).toBe(1);
+    expect((out.error as any).error).toBe("script_error");
+    expect((out.error as any).message).toContain("budget exhausted");
+  });
+});
+
+describe("runWorkflow — --strict determinism sandbox", () => {
+  test("forbids Date.now() in the body under strict (exit 1, mentions strict); allows it otherwise", async () => {
+    const loaded = {
+      workflow: async () => ({ t: Date.now() }),
+      fake: { default: { text: "x" as const } },
+    };
+    const mk = (strict: boolean) =>
+      runWorkflow(
+        { wfPath: "w", agent: "fake", args: undefined, pretty: false, strict } as any,
+        {
+          loadWorkflow: async () => loaded as any,
+          resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+          journalSink: () => {},
+          now: () => 0,
+          runId: () => "t",
+        },
+      );
+
+    const strictOut = await mk(true);
+    expect(strictOut.exitCode).toBe(1);
+    expect((strictOut.error as any).error).toBe("script_error");
+    expect((strictOut.error as any).message).toContain("strict");
+
+    const looseOut = await mk(false);
+    expect(looseOut.exitCode).toBe(0);
+  });
+
+  test("concurrent --strict runs do not corrupt the global Date after both finish (reentrancy)", async () => {
+    const REAL_DATE = globalThis.Date;
+    const mk = () => {
+      const loaded = {
+        // Body yields at a timer so the two runs' strict windows overlap; it
+        // touches no Date/Math.random so it stays valid under --strict.
+        workflow: async ({ agent }: any) => {
+          await new Promise((r) => setTimeout(r, 5));
+          return { x: await agent("go") };
+        },
+        fake: { default: { text: "ok" as const } },
+      };
+      return runWorkflow(
+        { wfPath: "w", agent: "fake", args: undefined, pretty: false, strict: true } as any,
+        {
+          loadWorkflow: async () => loaded as any,
+          resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+          journalSink: () => {},
+          now: () => 0,
+          runId: () => "t",
+        },
+      );
+    };
+    try {
+      const [a, b] = await Promise.all([mk(), mk()]);
+      expect(a.exitCode).toBe(0);
+      expect(b.exitCode).toBe(0);
+      // The buggy save/restore would leave a throwing StrictDate installed.
+      expect(() => Date.now()).not.toThrow();
+      expect(typeof Date.now()).toBe("number");
+    } finally {
+      globalThis.Date = REAL_DATE; // belt-and-suspenders so a failure can't poison the suite
+    }
+  });
+
+  test("withStrict restores globals even when patching partially fails mid-setup", async () => {
+    const REAL_DATE = globalThis.Date;
+    const REAL_RANDOM = Math.random;
+    // Freeze Math.random so the patch assignment throws AFTER Date was patched —
+    // the partial-patch hazard. The fix must still restore Date (not leave the
+    // throwing StrictDate installed).
+    Object.defineProperty(Math, "random", { value: REAL_RANDOM, writable: false, configurable: true });
+    try {
+      const loaded = {
+        workflow: async ({ agent }: any) => ({ x: await agent("go") }),
+        fake: { default: { text: "ok" as const } },
+      };
+      const out = await runWorkflow(
+        { wfPath: "w", agent: "fake", args: undefined, pretty: false, strict: true } as any,
+        {
+          loadWorkflow: async () => loaded as any,
+          resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+          journalSink: () => {},
+          now: () => 0,
+          runId: () => "t",
+        },
+      );
+      expect(out.exitCode).toBe(1); // patching threw → script_error
+      expect(globalThis.Date).toBe(REAL_DATE); // …but Date was restored, not leaked
+      expect(() => Date.now()).not.toThrow();
+    } finally {
+      Object.defineProperty(Math, "random", { value: REAL_RANDOM, writable: true, configurable: true });
+      globalThis.Date = REAL_DATE;
+    }
+  });
+
+  test("withStrict restore is fault-tolerant: a global frozen mid-run does not strand the OTHER global", async () => {
+    const REAL_DATE = globalThis.Date;
+    const REAL_RANDOM = Math.random;
+    try {
+      const loaded = {
+        // Inside the run, freeze globalThis.Date so the finally's Date-restore
+        // throws. The Math.random restore must still happen (independent restore).
+        workflow: async ({ agent }: any) => {
+          Object.defineProperty(globalThis, "Date", { value: globalThis.Date, writable: false, configurable: true });
+          return { x: await agent("go") };
+        },
+        fake: { default: { text: "ok" as const } },
+      };
+      await runWorkflow(
+        { wfPath: "w", agent: "fake", args: undefined, pretty: false, strict: true } as any,
+        {
+          loadWorkflow: async () => loaded as any,
+          resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+          journalSink: () => {},
+          now: () => 0,
+          runId: () => "t",
+        },
+      );
+      // Date restore threw (it's frozen), but Math.random must NOT be left as the
+      // throwing boom — the restore of the other global must still run.
+      expect(() => Math.random()).not.toThrow();
+      expect(Math.random).toBe(REAL_RANDOM);
+    } finally {
+      Object.defineProperty(globalThis, "Date", { value: REAL_DATE, writable: true, configurable: true });
+      Object.defineProperty(Math, "random", { value: REAL_RANDOM, writable: true, configurable: true });
+    }
+  });
+});
+
 describe("runWorkflow — resume passthrough", () => {
   test("deps.resume serves a cached hit: the adapter is never invoked", async () => {
     const workflow = async (rt: any) => {
@@ -294,6 +586,20 @@ describe("runCommand — resume input guards", () => {
 
     expect(code).toBe(0); // still completes (live) — but the user is told
     expect(errs.join("")).toContain("resume_empty");
+  });
+
+  test("--resume accepts a runId, resolving <omwDir>/<runId>.jsonl (not a literal path)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omw-resumeid-"));
+    const omwDir = join(dir, ".omw");
+    mkdirSync(omwDir, { recursive: true });
+    writeFileSync(join(omwDir, "r-abc.jsonl"), ""); // a journal stored under its runId
+    const errs: string[] = [];
+    const code = await runCommand(
+      ["examples/deep-research", "--agent", "fake", "--resume", "r-abc"],
+      { stdout: () => {}, stderr: (s) => errs.push(s), omwDir, runId: () => "rtest" },
+    );
+    expect(code).toBe(0); // resolved + read (empty → resume_empty warn), not resume_read_failed
+    expect(errs.join("")).not.toContain("resume_read_failed");
   });
 
   test("exit 1 + resume_read_failed when the --resume path is unreadable", async () => {

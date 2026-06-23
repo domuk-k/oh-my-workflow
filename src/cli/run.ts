@@ -9,7 +9,7 @@ import type { AgentPort } from "../adapters/types";
 import { makeFakeAdapter, type FakeAdapterOptions } from "../adapters/fake";
 import { makeClaudeAdapter } from "../adapters/claude";
 import { makeCodexAdapter } from "../adapters/codex";
-import type { Runtime } from "../runtime";
+import type { Runtime, WorkflowMeta } from "../runtime";
 import { makeRuntime } from "../runtime";
 import { makeJournal, parseJournalLines, type JournalEvent } from "../journal";
 import type { ResumeIndex } from "../resume";
@@ -23,6 +23,12 @@ export type RunOptions = {
   pretty: boolean;
   /** Path to a prior run's journal to resume from (longest-unchanged-prefix). */
   resume?: string;
+  /** Opt-in determinism sandbox: forbid Date/Math.random in the script body so a
+   *  run is reproducible (matches native dynamic-workflow's freeze-throw). */
+  strict?: boolean;
+  /** Token ceiling for the whole run; agent() throws BudgetExceededError once the
+   *  shared spend reaches it. */
+  budget?: number;
 };
 
 export type ParseResult =
@@ -36,6 +42,8 @@ export function parseRunArgs(argv: string[]): ParseResult {
   let concurrency: number | undefined;
   let pretty = false;
   let resume: string | undefined;
+  let budget: number | undefined;
+  let strict = false;
 
   for (let i = 0; i < argv.length; i++) {
     const tok = argv[i]!;
@@ -61,8 +69,20 @@ export function parseRunArgs(argv: string[]): ParseResult {
         concurrency = n;
         break;
       }
+      case "--budget": {
+        const raw = argv[++i];
+        const n = Number(raw);
+        if (raw === undefined || !Number.isInteger(n) || n < 1) {
+          return { ok: false, error: `--budget must be a positive integer, got: ${raw}` };
+        }
+        budget = n;
+        break;
+      }
       case "--pretty":
         pretty = true;
+        break;
+      case "--strict":
+        strict = true;
         break;
       case "--resume":
         resume = argv[++i];
@@ -77,7 +97,7 @@ export function parseRunArgs(argv: string[]): ParseResult {
   if (wfPath === undefined) return { ok: false, error: "missing workflow path" };
   if (agent === undefined) return { ok: false, error: "missing --agent <name>" };
 
-  return { ok: true, value: { wfPath, agent, args, concurrency, pretty, resume } };
+  return { ok: true, value: { wfPath, agent, args, concurrency, pretty, resume, budget, strict } };
 }
 
 // ── workflow execution ──────────────────────────────────────────────────────
@@ -88,6 +108,8 @@ export function parseRunArgs(argv: string[]): ParseResult {
 export type LoadedWorkflow = {
   workflow: (rt: Runtime, args: unknown) => unknown | Promise<unknown>;
   fake?: FakeAdapterOptions;
+  /** Optional `export const meta` describing the workflow (name/phases/model). */
+  meta?: WorkflowMeta;
 };
 
 /** Either a ready adapter, or a structured "not installed" signal (exit 3). */
@@ -145,9 +167,11 @@ export async function loadWorkflow(wfPath: string): Promise<LoadedWorkflow> {
 
   const mod = await import(entry);
   if (typeof mod.default !== "function") {
-    throw new Error(`workflow ${wfPath} must default-export a function (rt, args) => result`);
+    throw new Error(
+      `workflow ${wfPath} must default-export a function ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result (legacy (rt, args) still supported)`,
+    );
   }
-  return { workflow: mod.default, fake: mod.fake };
+  return { workflow: mod.default, fake: mod.fake, meta: mod.meta };
 }
 
 export type RunDeps = {
@@ -175,6 +199,82 @@ export type RunOutcome = {
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+/** True when a workflow's first param is NOT an object-destructuring pattern,
+ *  i.e. the legacy positional `(rt, args)` shape. Used only to emit a
+ *  deprecation nudge — never to dispatch, since the same object satisfies both
+ *  contracts. A source sniff via Function.prototype.toString; heuristic by
+ *  nature (it can't see through a bound/wrapped fn), but a non-fatal warning is
+ *  the right altitude for a heuristic. */
+function isLegacyShape(fn: Function): boolean {
+  const src = Function.prototype.toString.call(fn);
+  // New shape = first param is an object-destructuring pattern. Allow an optional
+  // function NAME between `function` and `(` (e.g. `function deepResearch({…})`),
+  // else a named destructured default export is misflagged as legacy.
+  return !/^\s*(async\s+)?function\s*\*?\s*[A-Za-z0-9_$]*\s*\(\s*\{|^\s*\(\s*\{|^\s*async\s*\(\s*\{/.test(src);
+}
+
+/** Run `fn` with Date/Math.random frozen to throw, restoring them after (even on
+ *  throw). Opt-in determinism: a `--strict` run fails loudly if the script reaches
+ *  for wall-clock or randomness, which would make a journal non-reproducible.
+ *  Scoped to the invoke and restored in finally — the engine's injected clock is
+ *  untouched, so journaling/resume still work. Mirrors native's freeze-throw. */
+// Reentrancy state for withStrict. The patch touches PROCESS-GLOBAL Date/
+// Math.random, so overlapping strict runs (nested workflow() or concurrent
+// runWorkflow callers in one process) must share a SINGLE install and restore
+// only when the last one unwinds. A naive per-call save/restore races: a second
+// caller would snapshot the already-patched StrictDate as its "original" and
+// restore it back, leaving the throwing clock installed forever. Depth-counting
+// with the true original captured once (at depth 0) closes that.
+let strictDepth = 0;
+let strictSavedDate: DateConstructor;
+let strictSavedRandom: () => number;
+
+async function withStrict<T>(strict: boolean | undefined, fn: () => T | Promise<T>): Promise<T> {
+  if (!strict) return await fn();
+  const entering = strictDepth === 0;
+  if (entering) {
+    // Snapshot the TRUE originals before any patch (a plain var write, can't throw).
+    strictSavedDate = globalThis.Date;
+    strictSavedRandom = Math.random;
+  }
+  // Increment and enter the try BEFORE patching, so a throw mid-patch (e.g. a
+  // frozen global) still hits finally and restores — no leaked StrictDate.
+  strictDepth++;
+  try {
+    if (entering) {
+      const boom = (what: string): never => {
+        throw new Error(`omw --strict: ${what} is forbidden in a deterministic workflow (pass values in via args)`);
+      };
+      class StrictDate extends strictSavedDate {
+        constructor(...args: any[]) {
+          if (args.length === 0) boom("new Date()");
+          super(...(args as [number]));
+        }
+        static now(): number {
+          return boom("Date.now()");
+        }
+      }
+      globalThis.Date = StrictDate as DateConstructor;
+      Math.random = () => boom("Math.random()");
+    }
+    return await fn();
+  } finally {
+    strictDepth--;
+    if (strictDepth === 0) {
+      // Restore each global independently: if one assignment throws (the global
+      // was frozen mid-run — the same hostile env this guards against), the other
+      // must still be restored, or a throwing patch leaks process-wide. Swallow
+      // the restore error so it can't mask fn()'s real result/error either.
+      try {
+        globalThis.Date = strictSavedDate;
+      } catch {}
+      try {
+        Math.random = strictSavedRandom;
+      } catch {}
+    }
+  }
+}
+
 export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunOutcome> {
   let loaded: LoadedWorkflow;
   try {
@@ -193,11 +293,54 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
 
   const runId = deps.runId();
   const journal = makeJournal({ sink: deps.journalSink, now: deps.now });
-  const rt = makeRuntime({ adapter: resolved.adapter, journal, concurrency: opts.concurrency, resume: deps.resume });
+  // One spend accumulator for the whole run: parent + any nested workflow()
+  // child point at it, so the token pool is shared (matches native).
+  const budgetState = { spent: 0 };
+  const rt = makeRuntime({
+    adapter: resolved.adapter,
+    journal,
+    concurrency: opts.concurrency,
+    resume: deps.resume,
+    budget: opts.budget,
+    budgetState,
+    meta: loaded.meta,
+  });
+
+  // workflow(ref, args?) runs another workflow inline as a sub-step, sharing the
+  // resolved adapter + journal + spend pool. One level only: a workflow() inside
+  // a child throws, so a runaway recursion can't hide behind the null-contract.
+  const makeWorkflowHook = (depth: number) =>
+    async (ref: string | { scriptPath: string }, childArgs?: unknown): Promise<unknown> => {
+      if (depth >= 1) throw new Error("workflow() nesting is one level only");
+      const childPath = typeof ref === "string" ? ref : ref.scriptPath;
+      const childLoaded = await deps.loadWorkflow(childPath);
+      const childRt = makeRuntime({
+        adapter: resolved.adapter,
+        journal,
+        concurrency: opts.concurrency,
+        resume: deps.resume,
+        budget: opts.budget,
+        budgetState,
+        meta: childLoaded.meta,
+      });
+      const childHooks = { ...childRt, workflow: makeWorkflowHook(depth + 1) };
+      return await childLoaded.workflow(childHooks as unknown as Runtime, childArgs);
+    };
 
   journal.runStart({ run: runId, wf: opts.wfPath });
   try {
-    const result = await loaded.workflow(rt, opts.args);
+    // The SAME runtime object satisfies both authoring contracts: a legacy
+    // `(rt, args)` script reads `rt.agent`, a new `({ agent }, args)` script
+    // destructures it. No execution-time dispatch — only the deprecation nudge
+    // needs to detect the legacy positional shape. `workflow` is layered on here
+    // (not in makeRuntime) since nesting needs the loader + resolved adapter.
+    const hooks = { ...rt, workflow: makeWorkflowHook(0) };
+    if (isLegacyShape(loaded.workflow)) {
+      deps.stderr?.(
+        "omw: deprecation — positional `rt` authoring is deprecated; destructure hooks `({ agent, ... }, args)`. Removed in 0.5. Run `omw codemod`.\n",
+      );
+    }
+    const result = await withStrict(opts.strict, () => loaded.workflow(hooks, opts.args));
     // internal_error is an AUTHOR bug (e.g. a JSON Schema that won't compile),
     // not a flaky node — the null-contract absorbs it so the run completes, but
     // we escalate to exit 4 so a caller (or authoring agent) doesn't read the
@@ -283,7 +426,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   if (!parsed.ok) {
     io.stderr(JSON.stringify({ error: "usage", message: parsed.error }));
     io.stderr(
-      "\nusage: omw run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--resume <journal.jsonl>] [--pretty]",
+      "\nusage: omw run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]",
     );
     return 2;
   }
@@ -296,11 +439,17 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   // unreadable --resume path is a user error, not a reason to silently run live).
   let resume: ResumeIndex | undefined;
   if (parsed.value.resume) {
+    // Accept either a journal path or a bare runId: if the arg isn't an existing
+    // file, treat it as a runId and resolve <omwDir>/<runId>.jsonl (the path the
+    // run wrote its journal to). Lets `--resume <runId>` mirror the runId printed
+    // on the prior run without the caller reconstructing the path.
+    const resumeArg = parsed.value.resume;
+    const resumePath = existsSync(resumeArg) ? resumeArg : join(omwDir, `${resumeArg}.jsonl`);
     let lines: string[];
     try {
-      lines = readFileSync(parsed.value.resume, "utf8").split("\n");
+      lines = readFileSync(resumePath, "utf8").split("\n");
     } catch {
-      io.stderr(JSON.stringify({ error: "resume_read_failed", path: parsed.value.resume }) + "\n");
+      io.stderr(JSON.stringify({ error: "resume_read_failed", path: resumePath }) + "\n");
       return 1;
     }
     resume = makeResumeIndexFromLines(lines);
@@ -308,7 +457,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
       // Readable but no cached nodes (empty/truncated/wrong file). Warn instead
       // of silently re-running every node live — which the user would read as a
       // free resume while paying full adapter cost.
-      io.stderr(JSON.stringify({ warning: "resume_empty", path: parsed.value.resume }) + "\n");
+      io.stderr(JSON.stringify({ warning: "resume_empty", path: resumePath }) + "\n");
     }
   }
 
@@ -326,6 +475,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
     now: () => Date.now(),
     runId: () => runId,
     resume,
+    stderr: io.stderr, // surface the legacy-authoring deprecation nudge to the user
   });
 
   if (outcome.stdout !== undefined) io.stdout(outcome.stdout + "\n");

@@ -26,6 +26,11 @@ describe("parseClaudeResult", () => {
     expect(r.meta.durationMs).toBe(golden.duration_ms);
   });
 
+  test("parseClaudeResult reads usage.output_tokens into meta", () => {
+    const r = parseClaudeResult({ type: "result", subtype: "success", result: "hi", duration_ms: 5, usage: { output_tokens: 42 } });
+    expect(r.ok && r.meta.outputTokens).toBe(42);
+  });
+
   test("is_error:true -> ok:false with subtype+result surfaced in stderr", () => {
     const errJson = {
       type: "result",
@@ -123,6 +128,27 @@ describe("makeClaudeAdapter (injected spawn)", () => {
     expect(calls[0]).toContain("claude-opus-4-8");
   });
 
+  test("effort/agentType are not pushed as claude args (no faithful CLI flag) and warn once", async () => {
+    const calls: string[][] = [];
+    const warns: string[] = [];
+    const adapter = makeClaudeAdapter({
+      spawn: async (args) => {
+        calls.push(args);
+        return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
+      },
+      warn: (m) => warns.push(m),
+    });
+    await adapter.invoke({ prompt: "x", effort: "high", agentType: "Explore" });
+    await adapter.invoke({ prompt: "y", effort: "low" });
+    // Honest-scope: claude -p has no effort/agentType flag, so they are dropped.
+    expect(calls[0]).not.toContain("--effort");
+    expect(calls[0]!.join(" ")).not.toContain("high");
+    expect(calls[0]!.join(" ")).not.toContain("Explore");
+    // Warned, but only once per distinct field across invocations.
+    expect(warns.filter((w) => w.includes("effort")).length).toBe(1);
+    expect(warns.filter((w) => w.includes("agentType")).length).toBe(1);
+  });
+
   test("followUp passes --resume <sessionId> to continue the session", async () => {
     const calls: string[][] = [];
     const adapter = makeClaudeAdapter({
@@ -134,6 +160,53 @@ describe("makeClaudeAdapter (injected spawn)", () => {
     await adapter.followUp!("sess-123", "and again");
     expect(calls[0]).toContain("--resume");
     expect(calls[0]).toContain("sess-123");
+  });
+
+  // Regression: claude keys session history by project directory, so a resume
+  // MUST run in the same cwd as the original invoke or it fails with
+  // "No conversation found". followUp must forward cwd to the spawn opts.
+  test("followUp forwards cwd so --resume finds the session", async () => {
+    const opts: Array<{ cwd?: string } | undefined> = [];
+    const adapter = makeClaudeAdapter({
+      spawn: async (_args, o) => {
+        opts.push(o);
+        return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
+      },
+    });
+    await adapter.followUp!("sess-123", "and again", { cwd: "/repo/under/review" });
+    expect(opts[0]?.cwd).toBe("/repo/under/review");
+  });
+
+  // The node is isolated from the host's MCP servers by default (booting them is
+  // the dominant fan-out latency); inheritMcp opts back in.
+  test("invoke adds --strict-mcp-config by default, omits it when inheritMcp", async () => {
+    const calls: string[][] = [];
+    const adapter = makeClaudeAdapter({
+      spawn: async (args) => {
+        calls.push(args);
+        return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
+      },
+    });
+    await adapter.invoke({ prompt: "x" });
+    expect(calls[0]).toContain("--strict-mcp-config");
+    await adapter.invoke({ prompt: "x", inheritMcp: true });
+    expect(calls[1]).not.toContain("--strict-mcp-config");
+  });
+
+  // The resume turn must mirror the original invoke's MCP choice, or the
+  // self-repair runs in a different environment than the turn it continues.
+  test("followUp mirrors inheritMcp: strict by default, omitted when inherited", async () => {
+    const calls: string[][] = [];
+    const adapter = makeClaudeAdapter({
+      spawn: async (args) => {
+        calls.push(args);
+        return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
+      },
+    });
+    await adapter.followUp!("s", "fix", {});
+    expect(calls[0]).toContain("--strict-mcp-config");
+    await adapter.followUp!("s", "fix", { inheritMcp: true });
+    expect(calls[1]).not.toContain("--strict-mcp-config");
   });
 
   test("a non-zero exit (no JSON) -> ok:false nonzero_exit, never throws", async () => {

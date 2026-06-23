@@ -34,8 +34,12 @@ describe("parseSkillArgs", () => {
     expect(parseSkillArgs(["--help"])).toEqual({ ok: true, sub: "help" });
   });
   test("install default + --project", () => {
-    expect(parseSkillArgs(["install"])).toEqual({ ok: true, sub: "install", project: false });
-    expect(parseSkillArgs(["install", "--project"])).toEqual({ ok: true, sub: "install", project: true });
+    expect(parseSkillArgs(["install"])).toEqual({ ok: true, sub: "install", project: false, agent: "claude" });
+    expect(parseSkillArgs(["install", "--project"])).toEqual({ ok: true, sub: "install", project: true, agent: "claude" });
+  });
+  test("install --codex / --opencode select the agent", () => {
+    expect(parseSkillArgs(["install", "--codex"])).toEqual({ ok: true, sub: "install", project: false, agent: "codex" });
+    expect(parseSkillArgs(["install", "--opencode"])).toEqual({ ok: true, sub: "install", project: false, agent: "opencode" });
   });
   test("path takes no args", () => {
     expect(parseSkillArgs(["path"])).toEqual({ ok: true, sub: "path" });
@@ -90,6 +94,18 @@ describe("skillCommand install", () => {
     expect(await skillCommand(["install", "--project"], mkIo({ homeDir: home, cwd, skillDir }).io)).toBe(0);
     expect(existsSync(join(cwd, ".claude", "skills", "oh-my-workflow", "SKILL.md"))).toBe(true);
     expect(existsSync(join(home, ".claude"))).toBe(false);
+  });
+
+  test("--codex and --opencode install into distinct dirs and don't wipe a sibling claude install", async () => {
+    const home = tmp("omw-home-");
+    const skillDir = srcDir();
+    expect(await skillCommand(["install"], mkIo({ homeDir: home, skillDir }).io)).toBe(0);
+    expect(await skillCommand(["install", "--codex"], mkIo({ homeDir: home, skillDir }).io)).toBe(0);
+    expect(await skillCommand(["install", "--opencode"], mkIo({ homeDir: home, skillDir }).io)).toBe(0);
+
+    expect(existsSync(join(home, ".claude", "skills", "oh-my-workflow", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(home, ".codex", "skills", "oh-my-workflow", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(home, ".config", "opencode", "skills", "oh-my-workflow", "SKILL.md"))).toBe(true);
   });
 
   test("path prints the bundled SKILL.md location", async () => {

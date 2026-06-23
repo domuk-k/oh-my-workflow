@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { makeRuntime } from "../src/runtime";
+import { makeRuntime, BudgetExceededError } from "../src/runtime";
 import { makeJournal, type JournalEvent } from "../src/journal";
 import { makeFakeAdapter } from "../src/adapters/fake";
 import { makeResumeIndex } from "../src/resume";
@@ -71,6 +71,81 @@ describe("runtime.agent — schema + null-contract", () => {
     expect(out).toEqual({ n: 9 });
     const attempts = journal.events().filter((e) => e.ev === "attempt");
     expect(attempts.map((a) => (a as { kind: string }).kind)).toEqual(["schema_violation", "ok"]);
+  });
+
+  test("self-repair falls back to a fresh invoke when followUp (resume) fails", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    let invokes = 0;
+    let followUps = 0;
+    // 1st invoke: invalid JSON but yields a sessionId → the retry takes the
+    // followUp path. followUp then FAILS (e.g. expired session). The gate must
+    // not treat that as terminal — it falls back to a fresh invoke, which is valid.
+    const adapter: AgentPort = {
+      name: "flaky-resume",
+      async invoke(): Promise<AgentResult> {
+        invokes++;
+        return invokes === 1
+          ? { ok: true, text: '{"wrong":1}', meta: { durationMs: 1, sessionId: "s1" } }
+          : { ok: true, text: '{"n":7}', meta: { durationMs: 1 } };
+      },
+      async followUp(): Promise<AgentResult> {
+        followUps++;
+        return { ok: false, kind: "nonzero_exit", stderr: "No conversation found", meta: { durationMs: 1 } };
+      },
+    };
+    const rt = makeRuntime({ adapter, journal });
+
+    const out = await rt.agent("compute", { schema: numSchema });
+    expect(out).toEqual({ n: 7 }); // recovered despite the broken resume
+    expect(followUps).toBe(1); // resume was attempted
+    expect(invokes).toBe(2); // and it fell back to a fresh invoke
+  });
+
+  test("fresh-retry path hands the model back its own prior non-conforming output (B6)", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    const prompts: string[] = [];
+    // No sessionId → the retry takes the FRESH-invoke path (not in-session
+    // followUp). A brand-new subprocess has no transcript of its prior attempt,
+    // so the gate must embed that attempt; otherwise the model repairs blind.
+    const adapter: AgentPort = {
+      name: "fresh-capture",
+      async invoke(req): Promise<AgentResult> {
+        prompts.push(req.prompt);
+        return prompts.length === 1
+          ? { ok: true, text: '{"wrong":"MARKER_ZZ9"}', meta: { durationMs: 1 } }
+          : { ok: true, text: '{"n":9}', meta: { durationMs: 1 } };
+      },
+    };
+    const rt = makeRuntime({ adapter, journal });
+
+    const out = await rt.agent("compute", { schema: numSchema });
+    expect(out).toEqual({ n: 9 });
+    expect(prompts.length).toBe(2);
+    // The fresh retry prompt carries the concrete prior output, not just errors.
+    expect(prompts[1]).toContain("MARKER_ZZ9");
+  });
+
+  test("in-session followUp retry stays lean — does NOT re-echo rawText (already in transcript)", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    let followUpPrompt = "";
+    // invalid + a sessionId → the retry takes the in-session followUp path, where
+    // the prior attempt is still in the live transcript, so re-sending it is waste.
+    const adapter: AgentPort = {
+      name: "session-capture",
+      async invoke(): Promise<AgentResult> {
+        return { ok: true, text: '{"wrong":"MARKER_SESS"}', meta: { durationMs: 1, sessionId: "s1" } };
+      },
+      async followUp(_s, prompt): Promise<AgentResult> {
+        followUpPrompt = prompt;
+        return { ok: true, text: '{"n":3}', meta: { durationMs: 1 } };
+      },
+    };
+    const rt = makeRuntime({ adapter, journal });
+
+    const out = await rt.agent("compute", { schema: numSchema });
+    expect(out).toEqual({ n: 3 });
+    expect(followUpPrompt).not.toContain("MARKER_SESS"); // prior output not re-sent
+    expect(followUpPrompt).toContain("required property 'n'"); // errors still carried
   });
 
   test("with no schema, returns the raw text", async () => {
@@ -235,6 +310,37 @@ describe("runtime.agent — resume (longest-unchanged-prefix cache)", () => {
   });
 });
 
+describe("runtime.agent — resume keys on semantic opts only", () => {
+  test("a cosmetic label change does not bust the cache (label excluded from key)", async () => {
+    const j1 = makeJournal({ now: () => 0 });
+    const a1 = countingAdapter();
+    const rt1 = makeRuntime({ adapter: a1, journal: j1 });
+    await rt1.agent("compute", { label: "a" });
+    expect(a1.calls()).toBe(1);
+
+    const j2 = makeJournal({ now: () => 0 });
+    const a2 = countingAdapter();
+    const resume = makeResumeIndex(j1.events());
+    const rt2 = makeRuntime({ adapter: a2, journal: j2, resume });
+    await rt2.agent("compute", { label: "b" }); // same prompt, different cosmetic label
+    expect(a2.calls()).toBe(0); // cache hit despite label change
+  });
+
+  test("a semantic opt change (model) DOES bust the cache", async () => {
+    const j1 = makeJournal({ now: () => 0 });
+    const a1 = countingAdapter();
+    const rt1 = makeRuntime({ adapter: a1, journal: j1 });
+    await rt1.agent("compute", { model: "m1" });
+
+    const j2 = makeJournal({ now: () => 0 });
+    const a2 = countingAdapter();
+    const resume = makeResumeIndex(j1.events());
+    const rt2 = makeRuntime({ adapter: a2, journal: j2, resume });
+    await rt2.agent("compute", { model: "m2" }); // different model → miss
+    expect(a2.calls()).toBe(1);
+  });
+});
+
 describe("runtime.agent — resume partial-failure recompute", () => {
   test("a prior failed node re-runs live while prior ok nodes stay cached", async () => {
     // Run 1: node A succeeds with a distinctive value; node B fails (timeout).
@@ -337,5 +443,131 @@ describe("runtime.agent — resume full-prefix cache (parallel fan-out)", () => 
     expect(synth).toEqual({ n: 1 }); // fresh value from a2, not the cached {n:5}
     const ends = j2.events().filter((e) => e.ev === "agent_end") as Extract<JournalEvent, { ev: "agent_end" }>[];
     expect(ends.map((e) => e.cached ?? false)).toEqual([true, true, true, true, false]);
+  });
+});
+
+describe("runtime — model precedence (opts > phase > meta default)", () => {
+  test("resolves the effective model from the opts > phase > meta chain", async () => {
+    const seen: (string | undefined)[] = [];
+    const adapter: AgentPort = {
+      name: "cap",
+      async invoke(req) {
+        seen.push(req.model);
+        return { ok: true, text: "x", meta: { durationMs: 0 } };
+      },
+    };
+    const journal = makeJournal({ now: () => 0 });
+    const rt = makeRuntime({
+      adapter,
+      journal,
+      meta: { model: "default-m", phases: [{ title: "A", model: "phase-a" }] },
+    });
+    rt.phase("A");
+    await rt.agent("1"); // phase A has a model → phase-a
+    await rt.agent("2", { model: "opt-m" }); // explicit opts wins
+    rt.phase("B"); // no phase model → meta default
+    await rt.agent("3");
+    expect(seen).toEqual(["phase-a", "opt-m", "default-m"]);
+  });
+
+  test("a malformed meta.phases (non-array) does not crash the run — model falls back", async () => {
+    const seen: (string | undefined)[] = [];
+    const adapter: AgentPort = {
+      name: "cap",
+      async invoke(req) {
+        seen.push(req.model);
+        return { ok: true, text: "x", meta: { durationMs: 0 } };
+      },
+    };
+    const journal = makeJournal({ now: () => 0 });
+    // Author typo: phases is a string, not an array of { title, model }.
+    const rt = makeRuntime({ adapter, journal, meta: { model: "default-m", phases: "scan" as any } });
+    rt.phase("scan");
+    const r = await rt.agent("1"); // must not throw on .find of a non-array
+    expect(r).toBe("x");
+    expect(seen).toEqual(["default-m"]); // falls back to meta.model
+  });
+});
+
+describe("runtime — isolation:'worktree'", () => {
+  test("threads the worktree dir as the node's cwd to the adapter", async () => {
+    const seenCwd: (string | undefined)[] = [];
+    const adapter: AgentPort = {
+      name: "cap",
+      async invoke(req) {
+        seenCwd.push(req.cwd);
+        return { ok: true, text: "x", meta: { durationMs: 0 } };
+      },
+    };
+    const journal = makeJournal({ now: () => 0 });
+    // Fake worktree: hand the body a sentinel dir instead of touching git.
+    const fakeWithWorktree = (async (_repo: string, fn: (d: string) => Promise<unknown>) =>
+      fn("/tmp/wt-sentinel")) as any;
+    const rt = makeRuntime({ adapter, journal, withWorktree: fakeWithWorktree });
+    await rt.agent("a", { isolation: "worktree", cwd: "/repo" });
+    await rt.agent("b"); // no isolation → caller cwd passes through unchanged
+    expect(seenCwd).toEqual(["/tmp/wt-sentinel", undefined]);
+  });
+});
+
+describe("runtime.budget — token accounting", () => {
+  test("budget.spent sums node output tokens; remaining counts down; Infinity when unset", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ text: "x", outputTokens: 30 }] }] });
+    const rt = makeRuntime({ adapter, journal, budget: 100 });
+    expect(rt.budget.total).toBe(100);
+    await rt.agent("a");
+    expect(rt.budget.spent()).toBe(30);
+    expect(rt.budget.remaining()).toBe(70);
+    const rt2 = makeRuntime({ adapter, journal });
+    expect(rt2.budget.remaining()).toBe(Infinity);
+  });
+
+  test("agent() throws BudgetExceededError once spent >= total (the one null-contract exception)", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ text: "x", outputTokens: 60 }] }] });
+    const rt = makeRuntime({ adapter, journal, budget: 50 });
+    await rt.agent("first"); // spends 60 ≥ 50 after this
+    await expect(rt.agent("second")).rejects.toBeInstanceOf(BudgetExceededError);
+  });
+
+  test("failed nodes that report output tokens still count toward budget (a failing-node loop terminates)", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    // A node that FAILS but reports tokens (e.g. claude error envelope with usage,
+    // or a refusal) — its spend must count, else a loop on it never trips the ceiling.
+    const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ fail: "nonzero_exit", outputTokens: 60 }] }] });
+    const rt = makeRuntime({ adapter, journal, budget: 50 });
+    const r = await rt.agent("first"); // fails → null, but spends 60 ≥ 50
+    expect(r).toBe(null);
+    expect(rt.budget.spent()).toBe(60);
+    await expect(rt.agent("second")).rejects.toBeInstanceOf(BudgetExceededError);
+  });
+
+  test("a malformed outputTokens (NaN/negative/non-number) does not corrupt the spend counter", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    // A buggy/custom adapter reports junk token counts. spent must stay a sane
+    // non-negative number, else `spent >= total` breaks and the ceiling never trips.
+    const adapter = makeFakeAdapter({
+      rules: [
+        { match: (p) => p.includes("nan"), responses: [{ text: "x", outputTokens: NaN }] },
+        { match: (p) => p.includes("neg"), responses: [{ text: "x", outputTokens: -100 }] },
+        { match: (p) => p.includes("str"), responses: [{ text: "x", outputTokens: "100" as any }] },
+      ],
+    });
+    const rt = makeRuntime({ adapter, journal, budget: 50 });
+    await rt.agent("nan");
+    await rt.agent("neg");
+    await rt.agent("str");
+    expect(rt.budget.spent()).toBe(0); // all junk coerced to 0, not NaN/string/negative
+    expect(rt.budget.remaining()).toBe(50);
+  });
+
+  test("a budget throw inside parallel() is swallowed to null (matches native)", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ text: "x", outputTokens: 99 }] }] });
+    const rt = makeRuntime({ adapter, journal, budget: 1 });
+    await rt.agent("warmup").catch(() => {});
+    const res = await rt.parallel([() => rt.agent("a")]);
+    expect(res).toEqual([null]);
   });
 });

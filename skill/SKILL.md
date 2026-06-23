@@ -9,11 +9,15 @@ You write a **plain-JS orchestration script**. Its nodes are whole coding-agent
 CLIs you already pay for (`claude -p`, `codex exec`). omw is the thin glue: it
 runs your script, schema-gates each node's output, and journals every step — so
 you can read your own failure and fix your own script. (What's "deterministic" is
-scoped below — the engine's guarantees and `--agent fake`, not your script.)
+scoped below — the engine's guarantees and `--agent fake`, not your script unless
+you pass `--strict`.)
 
-The runtime gives your script exactly **five hooks** (`agent` / `pipeline` /
-`parallel` / `phase` / `log`). That is the entire surface. There is no DSL to
-learn; everything else is ordinary JavaScript control flow.
+omw is the **open twin of Claude Code's native dynamic Workflow**: the same
+authoring shape and vocabulary (`agent` / `parallel` / `pipeline` / `workflow` /
+`budget`), but the nodes are *external coding-agent CLIs*, it runs from any host,
+and there is **no magic** — no source transform, no ambient globals, no
+sandbox-by-default. Your script is ordinary JavaScript; the runtime hands it a
+**hooks object** as the first argument. There is no DSL to learn.
 
 ## When to use this
 
@@ -24,15 +28,16 @@ benefits from structure you'd otherwise hand-roll:
 - **Verify / vote**: produce a finding, then have K independent agents judge it.
 - **Pipeline**: each item flows scope → search → verify → synthesize independently.
 - **Loop-until-dry**: keep spawning finders until a round returns nothing new.
+- **Budget-bounded loop**: keep working until a token ceiling is reached.
 
 You want: bounded concurrency, schema-validated node output with automatic
 node-level retry, a replayable journal, and a `null`-on-failure contract so one
 bad node never crashes the run.
 
-**Don't** use omw for a single agent call, or for work that needs a sandbox
-(omw deliberately has none — your script is trusted code), or where a node is a
-single raw LLM API call (that's LangGraph/Mastra territory; an omw node is a
-*whole coding agent*).
+**Don't** use omw for a single agent call, or where a node is a single raw LLM
+API call (that's LangGraph/Mastra territory; an omw node is a *whole coding
+agent*). omw has no sandbox by default — your script is trusted code — though you
+can opt into a determinism sandbox with `--strict`.
 
 ## The 30-second free demo (no API key, nothing to clone)
 
@@ -56,44 +61,68 @@ bunx oh-my-workflow@latest run examples/deep-research --agent fake --pretty
 ```
 
 `--agent fake` is a built-in, deterministic adapter — it's the no-key demo engine
-and the test double. When you're ready for real work, run `claude login` once and
-swap `--agent fake` → `--agent claude`. Same script, real nodes.
+and the test double. When you're ready for real work, log into your agent CLI once
+and swap `--agent fake` → `--agent claude` (or `--agent codex`). Same script, real
+nodes.
 
 > **Reading this as a skill?** You already have it. To install/update it for a
-> coding agent: `bunx oh-my-workflow@latest skill install` (→ `~/.claude/skills/`,
-> or `--project` for one repo); `omw skill path` prints the bundled copy for other
+> coding agent: `bunx oh-my-workflow@latest skill install` (→ `~/.claude/skills/`;
+> `--codex` → `~/.codex/skills/`; `--opencode` → `~/.config/opencode/skills/`;
+> `--project` for one repo). `omw skill path` prints the bundled copy for other
 > hosts. Re-run `skill install` anytime to refresh.
 
 ---
 
-## The 5 hooks (the entire API)
+## The hooks (the entire API)
 
-Your script is a module that **default-exports** `async (rt, args) => result`.
-`rt` is the runtime; `args` is whatever `--args '{…}'` passed (parsed JSON).
-The returned value is serialized to stdout as the run's single result JSON.
+Your script is a module that **default-exports** a function taking the **hooks**
+as a destructured first argument and your `args` second:
 
 ```ts
-export default async function (rt, args) {
-  // rt.agent / rt.pipeline / rt.parallel / rt.phase / rt.log
+export default async function ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) {
+  // destructure only the hooks you use
   return { /* whatever you want on stdout */ };
 }
 ```
 
-### `rt.agent(prompt, opts?) => Promise<result | null>`
+`args` is whatever `--args '{…}'` passed (parsed JSON). The returned value is
+serialized to stdout as the run's single result JSON. (Legacy `(rt, args)` scripts
+that call `rt.agent(…)` still run — the same object is passed — but they're
+deprecated; run `omw codemod <file>` to migrate. The bridge is removed in 0.5.)
 
-Runs one coding-agent CLI node. **Never throws.** A terminal failure resolves to
-`null` (and is journaled with a failure `kind`). This is the load-bearing
-**null-contract** — build on it with `filter(Boolean)` and abstain quorums.
+Optionally declare a `meta` block (a pure literal, like native):
 
 ```ts
-const out = await rt.agent("SCOPE the question into topics", {
+export const meta = {
+  name: "deep-research",
+  description: "fan-out research with verify",
+  phases: [{ title: "Search", model: "smart" }, { title: "Verify" }],
+};
+```
+
+`meta.phases[].model` and `meta.model` set a default model per phase / for the
+run; the effective model resolves along **`opts.model > phase model > meta.model`**.
+
+### `agent(prompt, opts?) => Promise<result | null>`
+
+Runs one coding-agent CLI node. **Never throws** (the one exception is `budget`
+exhaustion — see below). A terminal failure resolves to `null` (and is journaled
+with a failure `kind`). This is the load-bearing **null-contract** — build on it
+with `filter(Boolean)` and abstain quorums.
+
+```ts
+const out = await agent("SCOPE the question into topics", {
   schema: { type: "object", required: ["topics"], properties: { topics: { type: "array" } } },
-  label: "scope",        // shows in the journal / --pretty tree
-  phase: "Scope",        // overrides the ambient phase() for this call
-  model: "smart",        // tier alias or raw model string, passed to the adapter
-  timeoutMs: 120_000,    // kill the subprocess after this; failure kind = "timeout"
-  cwd: "/path/to/repo",  // run the agent in this directory
-  maxRetries: 2,         // schema-gate retries (default 2 → up to 3 attempts)
+  label: "scope",         // shows in the journal / --pretty tree (cosmetic; not in resume key)
+  phase: "Scope",         // overrides the ambient phase() for this call (cosmetic)
+  model: "smart",         // tier alias or raw model string, passed to the adapter
+  effort: "high",         // reasoning-effort hint (adapter maps it where supported)
+  agentType: "Explore",   // cross-vendor node profile (named agent persona)
+  isolation: "worktree",  // run this node in a fresh ephemeral git worktree (cwd = the worktree)
+  timeoutMs: 120_000,     // kill the subprocess after this; failure kind = "timeout"
+  cwd: "/path/to/repo",   // run the agent in this directory
+  maxRetries: 2,          // schema-gate retries (default 2 → up to 3 attempts)
+  inheritMcp: false,      // default: isolate from host MCP servers (fast). true = inherit (claude only)
 });
 ```
 
@@ -105,8 +134,14 @@ const out = await rt.agent("SCOPE the question into topics", {
   structured outcome. The schema is plain JSON Schema.
 - **Without `schema`**: one shot; returns the raw text string, or `null` on
   adapter failure.
+- `effort`/`agentType` are passed through to adapters that support them; the
+  `claude` adapter has no faithful CLI flag for them yet, so it **drops them with
+  a one-time warn** (honest-scope) rather than silently pretending.
+- `isolation: "worktree"` gives the node its own ephemeral `git worktree` as cwd,
+  so parallel file-mutating nodes don't clobber each other; the worktree is
+  auto-removed if the node left it clean. A non-git cwd runs in place with a warn.
 
-### `rt.parallel(thunks) => Promise<any[]>` — barrier
+### `parallel(thunks) => Promise<any[]>` — barrier
 
 Runs thunks concurrently, awaits **all** of them. A thunk that throws (or whose
 agent fails) becomes `null` in the result array — the call itself never rejects.
@@ -114,12 +149,12 @@ agent fails) becomes `null` in the result array — the call itself never reject
 together (dedup, count, cross-comparison).
 
 ```ts
-const results = (await rt.parallel(
-  topics.map((t) => () => rt.agent(`SEARCH ${t}`, { schema: S, label: `search:${t}` })),
+const results = (await parallel(
+  topics.map((t) => () => agent(`SEARCH ${t}`, { schema: S, label: `search:${t}` })),
 )).filter(Boolean);
 ```
 
-### `rt.pipeline(items, ...stages) => Promise<any[]>` — no barrier (default)
+### `pipeline(items, ...stages) => Promise<any[]>` — no barrier (default)
 
 Runs each item through **all** stages independently. Item A can be in stage 3
 while item B is still in stage 1 — wall-clock is the slowest single chain, not
@@ -129,16 +164,49 @@ default for multi-stage work; only use `parallel` as a barrier when a stage
 genuinely needs the whole previous result set at once.
 
 ```ts
-const verified = (await rt.pipeline(
+const verified = (await pipeline(
   found,
   async (f) => {
-    const v = await rt.agent(`VERIFY ${JSON.stringify(f)}`, { schema: V });
+    const v = await agent(`VERIFY ${JSON.stringify(f)}`, { schema: V });
     return v ? { ...f, ...v } : null;     // null → dropped by the filter below
   },
 )).filter(Boolean);
 ```
 
-### `rt.phase(title)` and `rt.log(msg)`
+### `workflow(ref, args?) => Promise<result>` — nested sub-workflow
+
+Runs another workflow inline as a sub-step, **one level deep**, sharing this run's
+adapter, journal, and budget pool. `ref` is a path string or `{ scriptPath }`.
+
+```ts
+const sub = await workflow({ scriptPath: "./refine.ts" }, { topic });
+```
+
+A `workflow()` call **inside** a child throws (`"workflow() nesting is one level
+only"`) — a runaway-recursion backstop.
+
+### `budget` — token ceiling
+
+`budget` is `{ total, spent(), remaining() }`. Set a ceiling with `--budget N`;
+`total` is `null` when unset and `remaining()` is then `Infinity`. Once spent
+reaches `total`, `agent()` **throws `BudgetExceededError`** — the *one* documented
+exception to the null-contract — so a bounded loop terminates instead of spinning.
+A throw inside `parallel`/`pipeline` is still swallowed to `null` (matches native).
+
+```ts
+const out = [];
+while (budget.remaining() > 50_000) {           // guard, or let agent() throw at the ceiling
+  const r = await agent("find the next bug");
+  if (r) out.push(r);
+}
+```
+
+> `budget` counts **output tokens the adapter reports** (success or a failure
+> envelope that carries `usage`). A token-less failure (a killed timeout reports
+> no usage) can't be counted — so a loop on a purely-timing-out node isn't bounded
+> by `--budget` alone; pair it with your own iteration cap.
+
+### `phase(title)` and `log(msg)`
 
 `phase` groups subsequent `agent()` calls under a heading in the journal and the
 `--pretty` tree. `log` emits a narration line. Both are side-channel only — they
@@ -157,10 +225,10 @@ pass hundreds of items — only ~N agent subprocesses run at once; the rest queu
 ### Fan-out (barrier)
 
 ```ts
-export default async function (rt, args) {
-  rt.phase("Search");
-  const hits = (await rt.parallel(
-    args.queries.map((q) => () => rt.agent(`SEARCH: ${q}`, { schema: HIT, label: `q:${q}` })),
+export default async function ({ agent, parallel, phase }, args) {
+  phase("Search");
+  const hits = (await parallel(
+    args.queries.map((q) => () => agent(`SEARCH: ${q}`, { schema: HIT, label: `q:${q}` })),
   )).filter(Boolean);
   return { hits, count: hits.length };
 }
@@ -173,10 +241,10 @@ Count only real verdicts, and require a quorum of *cast* votes so an all-abstain
 finding doesn't silently survive.
 
 ```ts
-async function survives(rt, claim) {
-  const votes = (await rt.parallel(
+async function survives({ agent, parallel }, claim) {
+  const votes = (await parallel(
     [1, 2, 3].map(() => () =>
-      rt.agent(`Try to REFUTE this claim. Default to refuted=true if unsure: ${claim}`, {
+      agent(`Try to REFUTE this claim. Default to refuted=true if unsure: ${claim}`, {
         schema: { type: "object", required: ["refuted"], properties: { refuted: { type: "boolean" } } },
       })),
   )).filter(Boolean);                       // drop abstainers (null)
@@ -185,11 +253,11 @@ async function survives(rt, claim) {
 }
 ```
 
-**Fresh context is the point — not self-critique.** Each `rt.agent()` call is a
-brand-new `claude -p` subprocess with no memory of the producer's turn, so a
-verify-vote node judges the claim cold. That is the structural form of Anthropic's
-own guidance for its most capable model: *"Separate, fresh-context verifier
-subagents tend to outperform self-critique"* ([Fable 5 prompting
+**Fresh context is the point — not self-critique.** Each `agent()` call is a
+brand-new subprocess with no memory of the producer's turn, so a verify-vote node
+judges the claim cold. That is the structural form of Anthropic's own guidance for
+its most capable model: *"Separate, fresh-context verifier subagents tend to
+outperform self-critique"* ([Fable 5 prompting
 guide](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5)).
 omw gets it for free — **as long as you keep verification a separate `agent()`
 call.** Do **not** verify by feeding the result back into the producer's own
@@ -197,10 +265,9 @@ session: the schema-gate's in-session self-repair (the `--resume` / `followUp`
 path) deliberately *reuses* the producer's context to fix output **format**, which
 is the exact opposite of fresh-context verification. Use self-repair to make a
 node's JSON valid; use a new `agent()` to judge whether the *content* is true.
-(A **cross-CLI** verifier — a different agent CLI than the producer, so a shared
-memorized shortcut can't survive both — is a natural extension but **not a feature
-today**: omw binds one adapter per run, so per-node verifier selection is future
-work. Verify with fresh same-CLI nodes for now.)
+(A **cross-CLI** verifier — a different agent CLI than the producer, via per-node
+`agentType` / a different adapter — is a natural extension but **not a feature
+today**: omw binds one adapter per run. Verify with fresh same-CLI nodes for now.)
 
 ### Gate on evidence, not intent
 
@@ -228,7 +295,7 @@ const strong = {
     output: { type: "string" },           // the observed tail, not a claim about it
   },
 };
-const built = await rt.agent("Run the build and the test suite. Report the command, its exit code, the number of passing tests, and the tail of the output.", { schema: strong });
+const built = await agent("Run the build and the test suite. Report the command, its exit code, the number of passing tests, and the tail of the output.", { schema: strong });
 ```
 
 **Executable-evidence verify node** — combine this with fresh-context verification:
@@ -236,11 +303,11 @@ a separate node *runs what the producer built and observes the result* before th
 finding is accepted, rather than judging the producer's description of it.
 
 ```ts
-const verified = (await rt.pipeline(
+const verified = (await pipeline(
   artifacts,
   async (a) => {
     // a.path was written by an upstream node; this fresh node runs it and reports facts.
-    const v = await rt.agent(
+    const v = await agent(
       `Run \`${a.runCmd}\` in ${a.path}. Report exitCode and the output tail. Do not fix anything — only observe and report.`,
       { schema: { type: "object", required: ["exitCode", "output"], properties: { exitCode: { type: "number" }, output: { type: "string" } } } },
     );
@@ -252,10 +319,10 @@ const verified = (await rt.pipeline(
 ### Pipeline (no barrier)
 
 ```ts
-const out = (await rt.pipeline(
+const out = (await pipeline(
   items,
-  (item) => rt.agent(`ANALYZE ${item.id}`, { schema: A, label: `analyze:${item.id}` }),
-  (analysis, item) => (analysis ? rt.agent(`SUMMARIZE ${item.id}: ${JSON.stringify(analysis)}`, { schema: S }) : null),
+  (item) => agent(`ANALYZE ${item.id}`, { schema: A, label: `analyze:${item.id}` }),
+  (analysis, item) => (analysis ? agent(`SUMMARIZE ${item.id}: ${JSON.stringify(analysis)}`, { schema: S }) : null),
 )).filter(Boolean);
 ```
 
@@ -266,12 +333,25 @@ For unknown-size discovery: keep going until K consecutive rounds find nothing n
 ```ts
 const seen = new Set(); const found = []; let dry = 0;
 while (dry < 2) {
-  const round = (await rt.parallel(
-    FINDERS.map((f) => () => rt.agent(f.prompt, { schema: BUG })),
+  const round = (await parallel(
+    FINDERS.map((f) => () => agent(f.prompt, { schema: BUG })),
   )).filter(Boolean);
   const fresh = round.filter((b) => !seen.has(b.key));
   if (fresh.length === 0) { dry++; continue; }
   dry = 0; fresh.forEach((b) => seen.add(b.key)); found.push(...fresh);
+}
+```
+
+### Loop-until-budget
+
+Scale depth to a token ceiling — guard on `budget.total` so an unset budget
+(`remaining()` = `Infinity`) doesn't loop forever.
+
+```ts
+const bugs = [];
+while (budget.total && budget.remaining() > 50_000) {
+  const r = await agent("Find one more bug.", { schema: BUG });
+  if (r) bugs.push(r);
 }
 ```
 
@@ -293,13 +373,15 @@ bun src/cli/omw.ts run my-workflow.ts --agent claude --args '{"q":"…"}'
 | code | meaning | where the detail is |
 |---|---|---|
 | `0` | run completed (node failures are absorbed by the null-contract) | stdout = result JSON |
-| `1` | **script error** — your JS threw, or syntax/load failure | stderr: `{"error":"script_error"\|"load_failed",…}` |
+| `1` | **script error** — your JS threw (incl. `BudgetExceededError`), or syntax/load failure | stderr: `{"error":"script_error"\|"load_failed",…}` |
 | `2` | usage error (bad flags) | stderr: usage line |
 | `3` | adapter CLI not on PATH | stderr: `{"error":"adapter_missing","install_hint":…}` |
+| `4` | completed, but a node hit `internal_error` (author bug, e.g. invalid schema) | stdout = partial result; stderr: `{"error":"internal_error_nodes",…}` |
 
 Exit `1` means **your script** threw (an `agent()` returning `null` does *not*
-throw — only your own code does). Exit `0` with fewer results than expected means
-nodes failed and were filtered — read the journal.
+throw — only your own code, or an uncaught `BudgetExceededError`, does). Exit `0`
+with fewer results than expected means nodes failed and were filtered — read the
+journal.
 
 ### Reading a journal
 
@@ -339,33 +421,33 @@ Failure `kind`s on `agent_end`:
 `omw replay .omw/<runId>.jsonl [--json]` reconstructs the tree / a stats summary
 from a journal — a read-only **fixture replay** (reading back what a run
 recorded). For *live* resume (re-running nodes whose key changed, reusing the
-cached ones), use `omw run <wf> --resume <journal>` — see Scope below.
+cached ones), use `omw run <wf> --resume <journal|runId>` — see Scope below.
 
 `omw validate <wf> [--json]` is a pre-flight that loads the module and lints a
 `fake` fixture for the silent-degradation traps (top-level `responses`, a string
 `match`, no rules+default) **without spawning agents** — exit 0 clean, 1 on a
-load/fixture problem. And a node that throws an `internal_error` (e.g. a JSON
-Schema that won't compile) no longer hides behind the null-contract: the run
-escalates to **exit 4** (the partial result still prints to stdout, and a
-`{"error":"internal_error_nodes","calls":[…]}` line goes to stderr), so an author
-bug reads differently from a flaky node abstaining.
+load/fixture problem.
 
 ---
 
 ## Conventions (follow these)
 
-1. **Build on the null-contract.** `agent()` returns `null`, never throws.
-   `.filter(Boolean)` after every `parallel`/`pipeline`. For votes, require a
-   quorum of *cast* (non-null) results so all-abstain can't pass.
+1. **Build on the null-contract.** `agent()` returns `null`, never throws (except
+   `BudgetExceededError` at the ceiling). `.filter(Boolean)` after every
+   `parallel`/`pipeline`. For votes, require a quorum of *cast* (non-null) results
+   so all-abstain can't pass.
 2. **Always pass a `schema` when you need structured data.** The gate's
    self-repair is the one genuine differentiator — use it instead of parsing
    prose yourself. Keep schemas tight (`required` + types).
 3. **Stay deterministic.** Don't branch the *shape* of the run on `Date.now()` /
-   `Math.random()` / wall-clock. The resume key is `(callIndex, promptHash,
-   optsHash)` (the journaled field is `call`); if a re-run's `agent()` call order shifts, every key shifts and
-   resume breaks. Vary content by index, not by randomness. (omw can't *enforce*
-   this — no sandbox — so it's a convention you keep; enforcement is v2.)
-4. **stdout is for the machine.** Return your result; use `rt.log` / `--pretty`
+   `Math.random()` / wall-clock. The resume key is the **semantic** subset of
+   `(callIndex, promptHash, optsHash)` — cosmetic `label`/`phase` changes don't
+   bust the cache, but `model`/`schema`/`effort`/`isolation` do. If a re-run's
+   `agent()` call order shifts, every key shifts and resume breaks; vary content
+   by index, not by randomness. omw can't enforce determinism by default (no
+   sandbox) — but pass **`--strict`** to freeze `Date`/`Math.random` to throw for
+   a reproducible run.
+4. **stdout is for the machine.** Return your result; use `log` / `--pretty`
    for humans. Never `console.log` to stdout from a workflow.
 5. **Ship a `fake` fixture for your example.** Export `const fake` alongside your
    default export so `--agent fake` runs deterministically with no key. The shape:
@@ -376,7 +458,8 @@ bug reads differently from a flaky node abstaining.
      // `responses` is a cursor that advances per invocation and sticks on the last —
      // so [invalidJSON, validJSON] models a schema self-repair, and a single
      // { fail } models a hard failure. A FakeResponse is { text } (a raw JSON
-     // STRING the gate then extracts + validates) or { fail, stderr }.
+     // STRING the gate then extracts + validates) or { fail, stderr }. Either may
+     // carry { outputTokens } to drive budget tests.
      rules: [
        { match: (p) => p.includes("SCOPE"), responses: [{ text: '{"topics":["a","b"]}' }] },
        { match: (p) => p.includes("SEARCH a"),
@@ -390,7 +473,7 @@ bug reads differently from a flaky node abstaining.
    Common mistake: a top-level `responses` array (instead of `rules`) or a string
    `match` is silently ignored — every node then returns `default` and the demo
    degenerates to an empty result. See `examples/deep-research/workflow.ts` for a
-   full working fixture.
+   full working fixture, and `conformance/*.ts` for native-shaped samples.
 
 ---
 
@@ -402,28 +485,32 @@ agents that expose such a CLI can be nodes.
 | adapter | status | invoke | structured out | in-session follow-up |
 |---|---|---|---|---|
 | **fake** | built-in, free, deterministic | in-process fixtures | as scripted | yes (fixture) |
-| **claude** | **full** (live-verified, claude 2.1.x) | `claude -p <p> --output-format json` | parse `.result` | `--resume` |
-| **codex** | **experimental** (live-verified, codex 0.137.x) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` |
+| **claude** | **full** (live-verified, claude 2.1.x) | `claude -p <p> --output-format json --strict-mcp-config` | parse `.result` | `--resume` (same cwd) |
+| **codex** | **experimental** (live-verified, codex 0.137.x) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` (same cwd) |
 | **pi** | planned | `pi --print` | stdout | — |
 | **kiro** | **not a fit** | — | — | — |
 
 > The "in-session follow-up" column is the adapter flag the **schema gate** uses to
 > re-prompt a node in the same session — *not* run-level resume. Run-level resume
-> (skipping unchanged nodes across separate runs) is **v2**; see Honest scope below.
+> (`--resume`, skipping unchanged nodes across runs) is a separate path.
 
 - **claude** renames its envelope onto omw's contract (`session_id→sessionId`,
-  `total_cost_usd→costUsd`, `duration_ms→durationMs`; `is_error`/non-success
-  `subtype` → `ok:false`).
+  `total_cost_usd→costUsd`, `duration_ms→durationMs`, `usage.output_tokens→
+  outputTokens`; `is_error`/non-success `subtype` → `ok:false`). By default a node
+  runs **isolated from the host's MCP servers** (`--strict-mcp-config`) — booting
+  figma/devtools/etc. on every node is the dominant fan-out latency, and a
+  coding-agent node rarely needs them. Opt back in per call with `{ inheritMcp:
+  true }`. `opts.effort`/`opts.agentType` have no faithful `claude -p` flag yet, so
+  they're **dropped with a one-time warn** rather than silently honored. The
+  schema-gate `--resume` runs in the **same cwd** as the original invoke and
+  **mirrors the same MCP choice**.
 - **codex** is experimental: it has **no cost field** (tokens only, so `costUsd`
   stays undefined), and its JSONL can include malformed lines under MCP
   (openai/codex#15451) — omw tolerates them line-by-line and fails *actionably*
-  (surfacing the reason) rather than returning empty. Default sandbox is
-  `workspace-write`.
-- **pi** isn't wired yet (not installed locally → `--agent pi` returns exit 3
-  with an install hint). It's a planned experimental adapter.
-- **kiro is excluded on purpose**: its CLI is a VS-Code-based IDE launcher (open
-  files, diffs, extensions), with no headless prompt→result interface — so it
-  can't be an omw node. The bar for an adapter is a real headless execution CLI.
+  rather than returning empty. Default sandbox is `workspace-write`.
+- **pi** isn't wired yet (`--agent pi` → exit 3 with an install hint).
+- **kiro is excluded on purpose**: its CLI is a VS-Code-based IDE launcher, with
+  no headless prompt→result interface — so it can't be an omw node.
 
 Missing CLI → exit 3 with `install_hint`. Run `--agent fake` any time for the
 free path.
@@ -451,54 +538,57 @@ self-repair loop, which is the one piece a "subprocess + for-loop" doesn't have.
 
 ### Resemblance ledger (vs the CC dynamic-workflow surface)
 
-**✅ Genuinely the same idea** — model-authored plain-JS orchestration; the
-5-hook shape (`agent`/`pipeline`/`parallel`/`phase`/`log`); `null`-resolution +
-`filter(Boolean)`; schema-forced structured output; a step-by-step journal;
-resume key `(callIndex, promptHash, optsHash)` (frozen and **proven byte-stable**
-across re-runs); **live resume** via `omw run --resume <journal>` — a **per-node
-key match** (cached nodes skip the adapter, `agent_end{cached:true}`; nodes whose
-key changed re-run; verified end-to-end on `--agent fake`).
+**✅ Genuinely the same idea** — model-authored plain-JS orchestration with the
+destructured-DI shape; the native vocabulary `agent`/`parallel`/`pipeline`/
+`phase`/`log`/`workflow`/`budget`; an optional `meta`/`phases` block with model
+precedence; `null`-resolution + `filter(Boolean)`; schema-forced structured
+output; `agent` opts `effort`/`agentType`/`isolation:'worktree'`; `budget` with a
+shared spend pool and a `BudgetExceededError` ceiling; nested `workflow()` (one
+level); a step-by-step journal; the resume key `(callIndex, promptHash,
+optsHash)` (frozen, byte-stable, and keyed on the **semantic** opts subset);
+**live resume** via `omw run --resume <journal|runId>`; and an opt-in `--strict`
+determinism sandbox.
 
 > One honest altitude difference even here: a CC Workflow node is a single
 > in-harness subagent; an **omw node is a whole external coding-agent CLI**
-> subprocess. Same orchestration shape, heavier nodes.
+> subprocess. Same orchestration shape, heavier nodes. And the no-magic stance is
+> deliberate: omw runs your script as-is (no source transform), hands hooks as an
+> argument (no ambient globals), and leaves determinism opt-in (`--strict`).
 
 **🟡 Designed-but-scoped** —
-- *Determinism enforcement*: CC throws on `Date.now`/`Math.random`; omw treats it
-  as a **convention** (no sandbox), so live resume holds **only for workflows that
-  keep it**. A guard that *enforces* it in resume mode is v2.
-- *Resume is per-node, not dependency-aware*: it matches `(callIndex, promptHash,
-  optsHash)`, so an upstream edit invalidates a downstream node **only if** that
-  output is threaded into the downstream prompt/opts. This is deliberate — it
-  preserves **parallel/pipeline sibling cache** (independent fan-out nodes aren't
-  forced live just because an earlier sibling changed). **The trap**: an omw node
-  is a whole coding-agent CLI that works on the **filesystem**, so "node 1 writes
-  files, node 2 reads them" is the *normal* coding-agent idiom — not an exotic
-  anti-pattern — and that channel is invisible to the key. Edit node 1 → on resume
-  it re-runs and writes different files, but node 2 **hits its cache and serves a
+- *Determinism enforcement*: native throws on `Date.now`/`Math.random` always;
+  omw makes it **opt-in** via `--strict` (the rest of the time it's a convention).
+- *Resume is per-node, not dependency-aware*: it matches the semantic
+  `(callIndex, promptHash, optsHash)`, so an upstream edit invalidates a
+  downstream node **only if** that output is threaded into the downstream
+  prompt/opts. This is deliberate — it preserves **parallel/pipeline sibling
+  cache**. **The trap**: an omw node is a whole coding-agent CLI that works on the
+  **filesystem**, so "node 1 writes files, node 2 reads them" is the *normal*
+  idiom — and that channel is invisible to the key. Edit node 1 → on resume it
+  re-runs and writes different files, but node 2 **hits its cache and serves a
   summary of the old files** (silently stale). Remedies: (a) re-run fresh (drop
-  `--resume`) when an upstream's filesystem effects changed, or (b) thread a
-  content digest of the changed files into the downstream prompt so its hash moves.
-  An opt-in `--strict-resume` (prefix truncation: force every node after the first
-  key MISS live — correct cascade for *linear* workflows, but over-invalidates
-  *parallel* siblings) and a dependency-aware cascade are both **v2** candidates;
-  per-node stays the default precisely because it keeps the parallel cache.
+  `--resume`), or (b) thread a content digest of the changed files into the
+  downstream prompt so its hash moves. A dependency-aware cascade is v2.
+- *`budget` counts reported output tokens only*: a token-less failure (a killed
+  timeout) can't be counted, so pair `--budget` with your own iteration cap when a
+  node may fail without producing tokens.
 
-**❌ Not implemented (CC Workflow has these; omw v1 does not)** — `budget`
-(token-target loops), nested `workflow()` (running another workflow inline), a
-`meta`/`phases` declaration block, `opts.agentType` (custom subagent types),
-`opts.effort`, `run_in_background`, and `isolation: 'worktree'`. Don't write
-scripts that assume these.
+**❌ Not implemented** (native has these; omw does not) — `run_in_background`
+(async node scheduling), and per-node verifier selection across *different*
+adapters in one run (omw binds one adapter per run; `agentType` is passed through
+but cross-CLI routing is future work). Don't write scripts that assume these.
 
 ---
 
 ## Quick reference
 
-- Module: `export default async (rt, args) => result` · optional `export const fake`.
+- Module: `export default async ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result` · optional `export const meta` / `export const fake`. (Legacy `(rt, args)` still runs; `omw codemod <file>` migrates it.)
 - Path resolves a directory to `workflow.ts` / `workflow.js` / `index.ts` / `index.js`.
-- `omw run <wf> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--resume <journal.jsonl>] [--pretty]`
+- `omw run <wf> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]`
 - `omw replay <journal.jsonl> [--json]`
 - `omw validate <wf> [--json]` — pre-flight: load + fake-fixture lint, no agents spawned.
-- exit codes: `0` ok · `1` script/load error · `2` usage · `3` adapter missing · `4` completed but a node hit `internal_error` (author bug; result still on stdout).
+- `omw codemod <file> [--to-di] [--write]` — migrate a legacy `(rt, args)` workflow to destructured DI.
+- `omw skill install [--codex|--opencode] [--project]` — install this skill for a coding agent.
+- exit codes: `0` ok · `1` script/load error (incl. budget ceiling) · `2` usage · `3` adapter missing · `4` completed but a node hit `internal_error` (author bug; result still on stdout).
 - stdout = result JSON · journal = `.omw/<runId>.jsonl` · `--pretty` tree = stderr.
-- `agent()` never throws → `filter(Boolean)`; quorum of cast votes for verify-vote.
+- `agent()` never throws (except `BudgetExceededError`) → `filter(Boolean)`; quorum of cast votes for verify-vote.

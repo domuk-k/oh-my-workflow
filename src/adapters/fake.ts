@@ -7,8 +7,8 @@
 import type { AgentPort, AgentResult, AgentFailureKind, InvokeRequest } from "./types";
 
 export type FakeResponse =
-  | { text: string; sessionId?: string; costUsd?: number }
-  | { fail: AgentFailureKind; stderr?: string };
+  | { text: string; sessionId?: string; costUsd?: number; outputTokens?: number }
+  | { fail: AgentFailureKind; stderr?: string; outputTokens?: number };
 
 export type FakeRule = {
   match: (prompt: string) => boolean;
@@ -23,12 +23,12 @@ export type FakeAdapterOptions = {
 
 function toResult(r: FakeResponse, durationMs: number): AgentResult {
   if ("fail" in r) {
-    return { ok: false, kind: r.fail, stderr: r.stderr, meta: { durationMs } };
+    return { ok: false, kind: r.fail, stderr: r.stderr, meta: { durationMs, outputTokens: r.outputTokens } };
   }
   return {
     ok: true,
     text: r.text,
-    meta: { durationMs, sessionId: r.sessionId, costUsd: r.costUsd },
+    meta: { durationMs, sessionId: r.sessionId, costUsd: r.costUsd, outputTokens: r.outputTokens },
   };
 }
 

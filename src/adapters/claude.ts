@@ -8,7 +8,7 @@
 // Spawn is injected so the parse/argv logic is tested without a subprocess or an
 // API call; the default spawn uses Bun.spawn and is exercised live under OMW_LIVE.
 
-import type { AgentPort, AgentResult, InvokeRequest } from "./types";
+import type { AgentPort, AgentResult, FollowUpOpts, InvokeRequest } from "./types";
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -18,6 +18,9 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
 export function parseClaudeResult(raw: unknown): AgentResult {
   const j = raw as Record<string, unknown> | null;
   const durationMs = Number(j?.duration_ms) || 0;
+  // Tokens are surfaced on success AND failure: an error/refusal envelope still
+  // carries `usage`, so budget accounting counts a failed node's real spend.
+  const outputTokens = (j?.usage as { output_tokens?: number } | undefined)?.output_tokens;
 
   // A safety/decline refusal (stop_reason "refusal") is a journaled DECLINE — not
   // a crash, and not a real answer. Classify it FIRST, before the is_error/subtype
@@ -33,14 +36,14 @@ export function parseClaudeResult(raw: unknown): AgentResult {
       ok: false,
       kind: "refusal",
       stderr: `refusal${category ? `(${category})` : ""}: ${detail}`.trim(),
-      meta: { durationMs },
+      meta: { durationMs, outputTokens },
     };
   }
 
   if (!j || j.type !== "result" || j.is_error === true || j.subtype !== "success") {
     const subtype = (j?.subtype ?? j?.type ?? "unknown") as string;
     const detail = typeof j?.result === "string" ? j.result : "";
-    return { ok: false, kind: "nonzero_exit", stderr: `${subtype}: ${detail}`.trim(), meta: { durationMs } };
+    return { ok: false, kind: "nonzero_exit", stderr: `${subtype}: ${detail}`.trim(), meta: { durationMs, outputTokens } };
   }
 
   return {
@@ -50,6 +53,7 @@ export function parseClaudeResult(raw: unknown): AgentResult {
       durationMs,
       sessionId: j.session_id as string | undefined,
       costUsd: j.total_cost_usd as number | undefined,
+      outputTokens,
     },
   };
 }
@@ -64,6 +68,9 @@ export type ClaudeAdapterDeps = {
   spawn?: ClaudeSpawn;
   /** Binary name/path; defaults to "claude" on PATH. */
   bin?: string;
+  /** Diagnostic sink for honest-scope notices (e.g. an opt with no faithful CLI
+   *  flag was dropped). Defaults to console.error. */
+  warn?: (msg: string) => void;
 };
 
 /** Default spawn over Bun.spawn. Kills the child after timeoutMs and flags it so
@@ -95,6 +102,15 @@ function defaultSpawn(bin: string): ClaudeSpawn {
 
 export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
   const spawn = deps.spawn ?? defaultSpawn(deps.bin ?? "claude");
+  const warn = deps.warn ?? ((m: string) => console.error(m));
+  // One-time per field: claude -p has no faithful flag for these yet, so they are
+  // dropped rather than silently honored. Warn once so a fan-out isn't spammed.
+  const warnedFields = new Set<string>();
+  const warnUnmapped = (field: string, value: unknown) => {
+    if (warnedFields.has(field)) return;
+    warnedFields.add(field);
+    warn(`omw(claude): \`${field}\` (=${String(value)}) has no claude -p flag; dropped for this run.`);
+  };
 
   async function run(args: string[], cwd?: string, timeoutMs?: number): Promise<AgentResult> {
     let res: ClaudeSpawnResult;
@@ -136,11 +152,21 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
     invoke(req: InvokeRequest): Promise<AgentResult> {
       const args = ["-p", req.prompt, "--output-format", "json"];
       if (req.model) args.push("--model", req.model);
+      if (req.effort !== undefined) warnUnmapped("effort", req.effort);
+      if (req.agentType !== undefined) warnUnmapped("agentType", req.agentType);
+      // Isolate the node from the host's MCP servers unless asked otherwise:
+      // booting figma/devtools/etc. on every node is the dominant fan-out latency.
+      if (!req.inheritMcp) args.push("--strict-mcp-config");
       return run(args, req.cwd, req.timeoutMs);
     },
-    followUp(sessionId: string, prompt: string): Promise<AgentResult> {
+    // `cwd` must match the original invoke — claude keys session history by
+    // project directory, so resuming elsewhere yields "No conversation found".
+    // MCP isolation must mirror the original invoke so the resume turn sees the
+    // same environment as the turn it continues.
+    followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
       const args = ["-p", prompt, "--resume", sessionId, "--output-format", "json"];
-      return run(args);
+      if (!opts?.inheritMcp) args.push("--strict-mcp-config");
+      return run(args, opts?.cwd);
     },
   };
 }

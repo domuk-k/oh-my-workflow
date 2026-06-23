@@ -27,8 +27,10 @@ export type SkillIo = {
   skillDir?: string;
 };
 
+export type SkillAgent = "claude" | "codex" | "opencode";
+
 export type SkillParse =
-  | { ok: true; sub: "install"; project: boolean }
+  | { ok: true; sub: "install"; project: boolean; agent: SkillAgent }
   | { ok: true; sub: "path" }
   | { ok: true; sub: "help" }
   | { ok: false; error: string };
@@ -36,8 +38,11 @@ export type SkillParse =
 const USAGE =
   "usage: omw skill <command>\n\n" +
   "commands:\n" +
-  "  install [--project]   copy the skill into a skills dir so a coding agent picks it up\n" +
-  "                        (default: ~/.claude/skills/oh-my-workflow; --project: ./.claude/skills/…)\n" +
+  "  install [--project] [--codex|--opencode]\n" +
+  "                        copy the skill into a coding agent's skills dir so it's picked up\n" +
+  "                        (default agent: claude → ~/.claude/skills/oh-my-workflow;\n" +
+  "                         --codex → ~/.codex/skills/…; --opencode → ~/.config/opencode/skills/…;\n" +
+  "                         --project targets the cwd instead of home)\n" +
   "  path                  print the bundled SKILL.md path (for cat / piping / pointing an agent at it)\n";
 
 export function parseSkillArgs(argv: string[]): SkillParse {
@@ -51,13 +56,29 @@ export function parseSkillArgs(argv: string[]): SkillParse {
   }
   if (sub === "install") {
     let project = false;
+    let agent: SkillAgent = "claude";
     for (const tok of rest) {
       if (tok === "--project") project = true;
+      else if (tok === "--codex") agent = "codex";
+      else if (tok === "--opencode") agent = "opencode";
       else return { ok: false, error: `unexpected argument: ${tok}` };
     }
-    return { ok: true, sub: "install", project };
+    return { ok: true, sub: "install", project, agent };
   }
   return { ok: false, error: `unknown skill subcommand: ${sub}` };
+}
+
+/** Per-agent destination for the skill, each a DISTINCT dir so a clean-replace
+ *  install never wipes a sibling agent's copy. */
+function skillDest(agent: SkillAgent, root: string): { destDir: string; discovers: string } {
+  switch (agent) {
+    case "codex":
+      return { destDir: join(root, ".codex", "skills", SKILL_NAME), discovers: "Codex" };
+    case "opencode":
+      return { destDir: join(root, ".config", "opencode", "skills", SKILL_NAME), discovers: "opencode" };
+    case "claude":
+      return { destDir: join(root, ".claude", "skills", SKILL_NAME), discovers: "Claude Code" };
+  }
 }
 
 export async function skillCommand(argv: string[], io: SkillIo): Promise<number> {
@@ -84,9 +105,10 @@ export async function skillCommand(argv: string[], io: SkillIo): Promise<number>
   }
 
   // install — idempotent: copy the whole skill dir (SKILL.md + any bundled
-  // resources) in place, and report installed vs updated.
-  const base = parsed.project ? join(io.cwd ?? process.cwd(), ".claude") : join(io.homeDir ?? homedir(), ".claude");
-  const destDir = join(base, "skills", SKILL_NAME);
+  // resources) in place, and report installed vs updated. The destination is
+  // per-agent and DISTINCT, so the clean-replace below never wipes a sibling.
+  const root = parsed.project ? (io.cwd ?? process.cwd()) : (io.homeDir ?? homedir());
+  const { destDir, discovers } = skillDest(parsed.agent, root);
   const dest = join(destDir, "SKILL.md");
   const updating = existsSync(dest);
   // Clean replace, not an additive copy: drop a prior install first so a file
@@ -97,7 +119,7 @@ export async function skillCommand(argv: string[], io: SkillIo): Promise<number>
 
   io.stdout(
     `${updating ? "updated" : "installed"} ${SKILL_NAME} skill → ${dest}\n` +
-      `${parsed.project ? "This project's" : "Claude Code"} agent auto-discovers skills here.\n` +
+      `${parsed.project ? "This project's" : discovers} agent auto-discovers skills here.\n` +
       `Next: ask your coding agent to "use oh-my-workflow to <your task>".\n`,
   );
   return 0;
