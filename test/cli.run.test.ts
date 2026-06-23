@@ -285,6 +285,31 @@ describe("runWorkflow — authoring surface (destructured DI + legacy bridge)", 
     expect(errs.join("")).toContain("deprecat");
   });
 
+  test("a NAMED destructured-DI workflow is not misflagged as legacy (no deprecation)", async () => {
+    const errs: string[] = [];
+    // `function deepResearch({ agent }, args)` — named + destructured (the shipped
+    // example's shape). Must not trip the legacy-shape sniff.
+    const named = {
+      workflow: async function deepResearch({ agent }: any, args: any) {
+        return { x: await agent("go"), args };
+      },
+      fake: { default: { text: "ok" as const } },
+    };
+    const out = await runWorkflow(
+      { wfPath: "x", agent: "fake", args: 1, pretty: false } as any,
+      {
+        loadWorkflow: async () => named as any,
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+        stderr: (s) => errs.push(s),
+      },
+    );
+    expect(out.exitCode).toBe(0);
+    expect(errs.join("")).not.toContain("deprecat");
+  });
+
   test("workflow() runs a nested child (sharing the parent adapter) and returns its value", async () => {
     const child = {
       workflow: async ({ agent }: any, a: any) => ({ child: await agent("c"), got: a }),

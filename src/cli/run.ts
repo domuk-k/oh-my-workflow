@@ -207,7 +207,10 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
  *  the right altitude for a heuristic. */
 function isLegacyShape(fn: Function): boolean {
   const src = Function.prototype.toString.call(fn);
-  return !/^\s*(async\s+)?function\s*\*?\s*\(\s*\{|^\s*\(\s*\{|^\s*async\s*\(\s*\{/.test(src);
+  // New shape = first param is an object-destructuring pattern. Allow an optional
+  // function NAME between `function` and `(` (e.g. `function deepResearch({…})`),
+  // else a named destructured default export is misflagged as legacy.
+  return !/^\s*(async\s+)?function\s*\*?\s*[A-Za-z0-9_$]*\s*\(\s*\{|^\s*\(\s*\{|^\s*async\s*\(\s*\{/.test(src);
 }
 
 /** Run `fn` with Date/Math.random frozen to throw, restoring them after (even on
@@ -334,7 +337,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
     const hooks = { ...rt, workflow: makeWorkflowHook(0) };
     if (isLegacyShape(loaded.workflow)) {
       deps.stderr?.(
-        "omw: deprecation — positional `rt` authoring is deprecated; destructure hooks `({ agent, ... }, args)`. Removed in 0.5. Run `omw codemod`.",
+        "omw: deprecation — positional `rt` authoring is deprecated; destructure hooks `({ agent, ... }, args)`. Removed in 0.5. Run `omw codemod`.\n",
       );
     }
     const result = await withStrict(opts.strict, () => loaded.workflow(hooks, opts.args));
@@ -472,6 +475,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
     now: () => Date.now(),
     runId: () => runId,
     resume,
+    stderr: io.stderr, // surface the legacy-authoring deprecation nudge to the user
   });
 
   if (outcome.stdout !== undefined) io.stdout(outcome.stdout + "\n");
