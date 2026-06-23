@@ -269,6 +269,60 @@ describe("runWorkflow — authoring surface (destructured DI + legacy bridge)", 
     expect(out2.exitCode).toBe(0);
     expect(errs.join("")).toContain("deprecat");
   });
+
+  test("workflow() runs a nested child (sharing the parent adapter) and returns its value", async () => {
+    const child = {
+      workflow: async ({ agent }: any, a: any) => ({ child: await agent("c"), got: a }),
+      fake: {},
+    };
+    const parent = {
+      workflow: async ({ workflow }: any) => ({ nested: await workflow({ scriptPath: "child" }, 9) }),
+      fake: {
+        rules: [
+          { match: (p: string) => p === "c", responses: [{ text: "kid" as const }] },
+          { match: () => true, responses: [{ text: "P" as const }] },
+        ],
+      },
+    };
+    const byPath: Record<string, any> = { parent, child };
+    const out = await runWorkflow(
+      { wfPath: "parent", agent: "fake", args: null, pretty: false } as any,
+      {
+        loadWorkflow: async (p: string) => byPath[p],
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+      },
+    );
+    expect(out.exitCode).toBe(0);
+    expect(JSON.parse(out.stdout!)).toEqual({ nested: { child: "kid", got: 9 } });
+  });
+
+  test("workflow() nesting is one level only — a grandchild call throws", async () => {
+    const grandchild = { workflow: async () => ({}), fake: {} };
+    const child = {
+      workflow: async ({ workflow }: any) => ({ deep: await workflow({ scriptPath: "grandchild" }) }),
+      fake: {},
+    };
+    const parent = {
+      workflow: async ({ workflow }: any) => ({ nested: await workflow({ scriptPath: "child" }) }),
+      fake: { default: { text: "x" as const } },
+    };
+    const byPath: Record<string, any> = { parent, child, grandchild };
+    const out = await runWorkflow(
+      { wfPath: "parent", agent: "fake", args: null, pretty: false } as any,
+      {
+        loadWorkflow: async (p: string) => byPath[p],
+        resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+      },
+    );
+    expect(out.exitCode).toBe(1);
+    expect((out.error as any).message).toContain("one level");
+  });
 });
 
 describe("runWorkflow — resume passthrough", () => {

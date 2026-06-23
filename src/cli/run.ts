@@ -208,15 +208,44 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
 
   const runId = deps.runId();
   const journal = makeJournal({ sink: deps.journalSink, now: deps.now });
-  const rt = makeRuntime({ adapter: resolved.adapter, journal, concurrency: opts.concurrency, resume: deps.resume });
+  // One spend accumulator for the whole run: parent + any nested workflow()
+  // child point at it, so the token pool is shared (matches native).
+  const budgetState = { spent: 0 };
+  const rt = makeRuntime({
+    adapter: resolved.adapter,
+    journal,
+    concurrency: opts.concurrency,
+    resume: deps.resume,
+    budgetState,
+  });
+
+  // workflow(ref, args?) runs another workflow inline as a sub-step, sharing the
+  // resolved adapter + journal + spend pool. One level only: a workflow() inside
+  // a child throws, so a runaway recursion can't hide behind the null-contract.
+  const makeWorkflowHook = (depth: number) =>
+    async (ref: string | { scriptPath: string }, childArgs?: unknown): Promise<unknown> => {
+      if (depth >= 1) throw new Error("workflow() nesting is one level only");
+      const childPath = typeof ref === "string" ? ref : ref.scriptPath;
+      const childLoaded = await deps.loadWorkflow(childPath);
+      const childRt = makeRuntime({
+        adapter: resolved.adapter,
+        journal,
+        concurrency: opts.concurrency,
+        resume: deps.resume,
+        budgetState,
+      });
+      const childHooks = { ...childRt, workflow: makeWorkflowHook(depth + 1) };
+      return await childLoaded.workflow(childHooks as unknown as Runtime, childArgs);
+    };
 
   journal.runStart({ run: runId, wf: opts.wfPath });
   try {
     // The SAME runtime object satisfies both authoring contracts: a legacy
     // `(rt, args)` script reads `rt.agent`, a new `({ agent }, args)` script
     // destructures it. No execution-time dispatch — only the deprecation nudge
-    // needs to detect the legacy positional shape.
-    const hooks = rt;
+    // needs to detect the legacy positional shape. `workflow` is layered on here
+    // (not in makeRuntime) since nesting needs the loader + resolved adapter.
+    const hooks = { ...rt, workflow: makeWorkflowHook(0) };
     if (isLegacyShape(loaded.workflow)) {
       deps.stderr?.(
         "omw: deprecation — positional `rt` authoring is deprecated; destructure hooks `({ agent, ... }, args)`. Removed in 0.5. Run `omw codemod`.",
