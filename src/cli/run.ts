@@ -9,7 +9,7 @@ import type { AgentPort } from "../adapters/types";
 import { makeFakeAdapter, type FakeAdapterOptions } from "../adapters/fake";
 import { makeClaudeAdapter } from "../adapters/claude";
 import { makeCodexAdapter } from "../adapters/codex";
-import type { Runtime } from "../runtime";
+import type { Runtime, WorkflowMeta } from "../runtime";
 import { makeRuntime } from "../runtime";
 import { makeJournal, parseJournalLines, type JournalEvent } from "../journal";
 import type { ResumeIndex } from "../resume";
@@ -88,6 +88,8 @@ export function parseRunArgs(argv: string[]): ParseResult {
 export type LoadedWorkflow = {
   workflow: (rt: Runtime, args: unknown) => unknown | Promise<unknown>;
   fake?: FakeAdapterOptions;
+  /** Optional `export const meta` describing the workflow (name/phases/model). */
+  meta?: WorkflowMeta;
 };
 
 /** Either a ready adapter, or a structured "not installed" signal (exit 3). */
@@ -147,7 +149,7 @@ export async function loadWorkflow(wfPath: string): Promise<LoadedWorkflow> {
   if (typeof mod.default !== "function") {
     throw new Error(`workflow ${wfPath} must default-export a function (rt, args) => result`);
   }
-  return { workflow: mod.default, fake: mod.fake };
+  return { workflow: mod.default, fake: mod.fake, meta: mod.meta };
 }
 
 export type RunDeps = {

@@ -3,6 +3,8 @@
 // default export is the orchestration fn; `fake` fixtures ride alongside.
 
 import { test, expect, describe } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadWorkflow } from "../src/cli/run";
 
@@ -23,5 +25,16 @@ describe("loadWorkflow", () => {
 
   test("throws when the module has no default export (script bug surfaced as load error)", async () => {
     await expect(loadWorkflow(join(FIX, "wf-nodefault.ts"))).rejects.toThrow();
+  });
+
+  test("loadWorkflow surfaces a meta named export when present", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omw-meta-"));
+    writeFileSync(
+      join(dir, "workflow.ts"),
+      `export const meta = { name: "m", phases: [{ title: "Scan" }] };\n` +
+        `export default async function ({ agent }, args) { return await agent("x"); }\n`,
+    );
+    const loaded = await loadWorkflow(dir);
+    expect(loaded.meta).toEqual({ name: "m", phases: [{ title: "Scan" }] });
   });
 });

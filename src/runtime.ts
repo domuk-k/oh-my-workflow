@@ -12,6 +12,17 @@ import { promptHash, optsHash } from "./journal";
 import type { ResumeIndex } from "./resume";
 import { schemaGate, makeValidator, type GateCall, type GateFeedback } from "./schema-gate";
 
+/** Optional `export const meta` a workflow can declare to describe itself and
+ *  its phases. Mirrors native dynamic-workflow's meta block: a pure literal the
+ *  loader reads for naming, phase titles, and per-phase/default model hints. */
+export type WorkflowMeta = {
+  name?: string;
+  description?: string;
+  whenToUse?: string;
+  model?: string;
+  phases?: Array<{ title: string; model?: string; detail?: string }>;
+};
+
 export type AgentOpts = {
   label?: string;
   phase?: string;
