@@ -395,6 +395,41 @@ describe("runWorkflow — --strict determinism sandbox", () => {
     const looseOut = await mk(false);
     expect(looseOut.exitCode).toBe(0);
   });
+
+  test("concurrent --strict runs do not corrupt the global Date after both finish (reentrancy)", async () => {
+    const REAL_DATE = globalThis.Date;
+    const mk = () => {
+      const loaded = {
+        // Body yields at a timer so the two runs' strict windows overlap; it
+        // touches no Date/Math.random so it stays valid under --strict.
+        workflow: async ({ agent }: any) => {
+          await new Promise((r) => setTimeout(r, 5));
+          return { x: await agent("go") };
+        },
+        fake: { default: { text: "ok" as const } },
+      };
+      return runWorkflow(
+        { wfPath: "w", agent: "fake", args: undefined, pretty: false, strict: true } as any,
+        {
+          loadWorkflow: async () => loaded as any,
+          resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+          journalSink: () => {},
+          now: () => 0,
+          runId: () => "t",
+        },
+      );
+    };
+    try {
+      const [a, b] = await Promise.all([mk(), mk()]);
+      expect(a.exitCode).toBe(0);
+      expect(b.exitCode).toBe(0);
+      // The buggy save/restore would leave a throwing StrictDate installed.
+      expect(() => Date.now()).not.toThrow();
+      expect(typeof Date.now()).toBe("number");
+    } finally {
+      globalThis.Date = REAL_DATE; // belt-and-suspenders so a failure can't poison the suite
+    }
+  });
 });
 
 describe("runWorkflow — resume passthrough", () => {

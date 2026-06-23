@@ -215,29 +215,46 @@ function isLegacyShape(fn: Function): boolean {
  *  for wall-clock or randomness, which would make a journal non-reproducible.
  *  Scoped to the invoke and restored in finally — the engine's injected clock is
  *  untouched, so journaling/resume still work. Mirrors native's freeze-throw. */
+// Reentrancy state for withStrict. The patch touches PROCESS-GLOBAL Date/
+// Math.random, so overlapping strict runs (nested workflow() or concurrent
+// runWorkflow callers in one process) must share a SINGLE install and restore
+// only when the last one unwinds. A naive per-call save/restore races: a second
+// caller would snapshot the already-patched StrictDate as its "original" and
+// restore it back, leaving the throwing clock installed forever. Depth-counting
+// with the true original captured once (at depth 0) closes that.
+let strictDepth = 0;
+let strictSavedDate: DateConstructor;
+let strictSavedRandom: () => number;
+
 async function withStrict<T>(strict: boolean | undefined, fn: () => T | Promise<T>): Promise<T> {
   if (!strict) return await fn();
-  const RealDate = globalThis.Date;
-  const realRandom = Math.random;
-  const boom = (what: string): never => {
-    throw new Error(`omw --strict: ${what} is forbidden in a deterministic workflow (pass values in via args)`);
-  };
-  class StrictDate extends RealDate {
-    constructor(...args: any[]) {
-      if (args.length === 0) boom("new Date()");
-      super(...(args as [number]));
+  if (strictDepth === 0) {
+    strictSavedDate = globalThis.Date;
+    strictSavedRandom = Math.random;
+    const boom = (what: string): never => {
+      throw new Error(`omw --strict: ${what} is forbidden in a deterministic workflow (pass values in via args)`);
+    };
+    class StrictDate extends strictSavedDate {
+      constructor(...args: any[]) {
+        if (args.length === 0) boom("new Date()");
+        super(...(args as [number]));
+      }
+      static now(): number {
+        return boom("Date.now()");
+      }
     }
-    static now(): number {
-      return boom("Date.now()");
-    }
+    globalThis.Date = StrictDate as DateConstructor;
+    Math.random = () => boom("Math.random()");
   }
-  globalThis.Date = StrictDate as DateConstructor;
-  Math.random = () => boom("Math.random()");
+  strictDepth++;
   try {
     return await fn();
   } finally {
-    globalThis.Date = RealDate;
-    Math.random = realRandom;
+    strictDepth--;
+    if (strictDepth === 0) {
+      globalThis.Date = strictSavedDate;
+      Math.random = strictSavedRandom;
+    }
   }
 }
 
