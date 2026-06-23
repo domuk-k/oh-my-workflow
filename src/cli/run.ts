@@ -352,11 +352,17 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   // unreadable --resume path is a user error, not a reason to silently run live).
   let resume: ResumeIndex | undefined;
   if (parsed.value.resume) {
+    // Accept either a journal path or a bare runId: if the arg isn't an existing
+    // file, treat it as a runId and resolve <omwDir>/<runId>.jsonl (the path the
+    // run wrote its journal to). Lets `--resume <runId>` mirror the runId printed
+    // on the prior run without the caller reconstructing the path.
+    const resumeArg = parsed.value.resume;
+    const resumePath = existsSync(resumeArg) ? resumeArg : join(omwDir, `${resumeArg}.jsonl`);
     let lines: string[];
     try {
-      lines = readFileSync(parsed.value.resume, "utf8").split("\n");
+      lines = readFileSync(resumePath, "utf8").split("\n");
     } catch {
-      io.stderr(JSON.stringify({ error: "resume_read_failed", path: parsed.value.resume }) + "\n");
+      io.stderr(JSON.stringify({ error: "resume_read_failed", path: resumePath }) + "\n");
       return 1;
     }
     resume = makeResumeIndexFromLines(lines);
@@ -364,7 +370,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
       // Readable but no cached nodes (empty/truncated/wrong file). Warn instead
       // of silently re-running every node live — which the user would read as a
       // free resume while paying full adapter cost.
-      io.stderr(JSON.stringify({ warning: "resume_empty", path: parsed.value.resume }) + "\n");
+      io.stderr(JSON.stringify({ warning: "resume_empty", path: resumePath }) + "\n");
     }
   }
 

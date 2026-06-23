@@ -2,7 +2,7 @@
 // surface a stranger types is fixed here before any orchestration exists.
 
 import { test, expect, describe } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseRunArgs, runCommand, runWorkflow, resolveAdapter } from "../src/cli/run";
@@ -390,6 +390,20 @@ describe("runCommand — resume input guards", () => {
 
     expect(code).toBe(0); // still completes (live) — but the user is told
     expect(errs.join("")).toContain("resume_empty");
+  });
+
+  test("--resume accepts a runId, resolving <omwDir>/<runId>.jsonl (not a literal path)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omw-resumeid-"));
+    const omwDir = join(dir, ".omw");
+    mkdirSync(omwDir, { recursive: true });
+    writeFileSync(join(omwDir, "r-abc.jsonl"), ""); // a journal stored under its runId
+    const errs: string[] = [];
+    const code = await runCommand(
+      ["examples/deep-research", "--agent", "fake", "--resume", "r-abc"],
+      { stdout: () => {}, stderr: (s) => errs.push(s), omwDir, runId: () => "rtest" },
+    );
+    expect(code).toBe(0); // resolved + read (empty → resume_empty warn), not resume_read_failed
+    expect(errs.join("")).not.toContain("resume_read_failed");
   });
 
   test("exit 1 + resume_read_failed when the --resume path is unreadable", async () => {
