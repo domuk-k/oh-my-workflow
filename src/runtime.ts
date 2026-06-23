@@ -11,6 +11,7 @@ import type { Journal } from "./journal";
 import { promptHash, optsHash } from "./journal";
 import type { ResumeIndex } from "./resume";
 import { schemaGate, makeValidator, type GateCall, type GateFeedback } from "./schema-gate";
+import { withWorktree as defaultWithWorktree } from "./worktree";
 
 /** Optional `export const meta` a workflow can declare to describe itself and
  *  its phases. Mirrors native dynamic-workflow's meta block: a pure literal the
@@ -37,6 +38,10 @@ export type AgentOpts = {
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
   /** Cross-vendor node profile (named agent persona) for this node. */
   agentType?: string;
+  /** Run this node in a fresh ephemeral git worktree (cwd = the worktree), so
+   *  parallel file-mutating nodes don't clobber each other. Best-effort: a
+   *  non-git cwd runs in place with a warning. */
+  isolation?: "worktree";
 };
 
 // `prev`/`item` are intentionally `any`: orchestration scripts are plain JS the
@@ -139,8 +144,12 @@ export function makeRuntime(deps: {
   /** The workflow's meta, used to resolve the effective model per node along the
    *  `opts.model > phase model > meta.model` chain. */
   meta?: WorkflowMeta;
+  /** Injected for isolation:'worktree'; defaults to the real git-backed helper.
+   *  Overridable so the runtime is testable without a git subprocess. */
+  withWorktree?: typeof defaultWithWorktree;
 }): Runtime {
   const { adapter, journal, resume } = deps;
+  const withWorktree = deps.withWorktree ?? defaultWithWorktree;
   const limit = makeLimiter(deps.concurrency ?? 4);
   let callCounter = 0;
   let currentPhase: string | undefined;
@@ -189,6 +198,9 @@ export function makeRuntime(deps: {
     }
 
     return limit(async () => {
+      // The node body, parameterized by the effective working directory so an
+      // isolation:'worktree' node runs the SAME logic with cwd = the worktree.
+      const body = async (effCwd: string | undefined): Promise<unknown | null> => {
       let durationMs = 0;
       const account = (r: AgentResult) => {
         durationMs += r.ok ? r.meta.durationMs : (r.meta?.durationMs ?? 0);
@@ -200,7 +212,7 @@ export function makeRuntime(deps: {
         adapter.invoke({
           prompt: p,
           model,
-          cwd: opts.cwd,
+          cwd: effCwd,
           timeoutMs: opts.timeoutMs,
           inheritMcp: opts.inheritMcp,
           effort: opts.effort,
@@ -237,7 +249,7 @@ export function makeRuntime(deps: {
             // Resume in the original cwd and with the same MCP choice, so the
             // repair turn runs in the same environment as the turn it continues.
             r = await adapter.followUp(lastSessionId, retryPrompt(prompt, feedback, false), {
-              cwd: opts.cwd,
+              cwd: effCwd,
               inheritMcp: opts.inheritMcp,
             });
             // Resume can fail even when the format hiccup was recoverable (e.g. a
@@ -286,6 +298,14 @@ export function makeRuntime(deps: {
         journal.agentEnd({ call, ok: false, kind: "internal_error", error: errMsg(e), durationMs });
         return null;
       }
+      };
+
+      // isolation:'worktree' gives the node its own ephemeral checkout as cwd;
+      // otherwise it runs in the caller-provided cwd (or the process cwd).
+      if (opts.isolation === "worktree") {
+        return withWorktree(opts.cwd ?? process.cwd(), (wt) => body(wt));
+      }
+      return body(opts.cwd);
     });
   }
 

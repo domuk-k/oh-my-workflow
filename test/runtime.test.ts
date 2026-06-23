@@ -440,6 +440,27 @@ describe("runtime — model precedence (opts > phase > meta default)", () => {
   });
 });
 
+describe("runtime — isolation:'worktree'", () => {
+  test("threads the worktree dir as the node's cwd to the adapter", async () => {
+    const seenCwd: (string | undefined)[] = [];
+    const adapter: AgentPort = {
+      name: "cap",
+      async invoke(req) {
+        seenCwd.push(req.cwd);
+        return { ok: true, text: "x", meta: { durationMs: 0 } };
+      },
+    };
+    const journal = makeJournal({ now: () => 0 });
+    // Fake worktree: hand the body a sentinel dir instead of touching git.
+    const fakeWithWorktree = (async (_repo: string, fn: (d: string) => Promise<unknown>) =>
+      fn("/tmp/wt-sentinel")) as any;
+    const rt = makeRuntime({ adapter, journal, withWorktree: fakeWithWorktree });
+    await rt.agent("a", { isolation: "worktree", cwd: "/repo" });
+    await rt.agent("b"); // no isolation → caller cwd passes through unchanged
+    expect(seenCwd).toEqual(["/tmp/wt-sentinel", undefined]);
+  });
+});
+
 describe("runtime.budget — token accounting", () => {
   test("budget.spent sums node output tokens; remaining counts down; Infinity when unset", async () => {
     const journal = makeJournal({ now: () => 0 });
