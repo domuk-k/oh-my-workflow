@@ -325,6 +325,34 @@ describe("runWorkflow — authoring surface (destructured DI + legacy bridge)", 
   });
 });
 
+describe("runWorkflow — --strict determinism sandbox", () => {
+  test("forbids Date.now() in the body under strict (exit 1, mentions strict); allows it otherwise", async () => {
+    const loaded = {
+      workflow: async () => ({ t: Date.now() }),
+      fake: { default: { text: "x" as const } },
+    };
+    const mk = (strict: boolean) =>
+      runWorkflow(
+        { wfPath: "w", agent: "fake", args: undefined, pretty: false, strict } as any,
+        {
+          loadWorkflow: async () => loaded as any,
+          resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+          journalSink: () => {},
+          now: () => 0,
+          runId: () => "t",
+        },
+      );
+
+    const strictOut = await mk(true);
+    expect(strictOut.exitCode).toBe(1);
+    expect((strictOut.error as any).error).toBe("script_error");
+    expect((strictOut.error as any).message).toContain("strict");
+
+    const looseOut = await mk(false);
+    expect(looseOut.exitCode).toBe(0);
+  });
+});
+
 describe("runWorkflow — resume passthrough", () => {
   test("deps.resume serves a cached hit: the adapter is never invoked", async () => {
     const workflow = async (rt: any) => {

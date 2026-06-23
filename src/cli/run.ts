@@ -23,6 +23,9 @@ export type RunOptions = {
   pretty: boolean;
   /** Path to a prior run's journal to resume from (longest-unchanged-prefix). */
   resume?: string;
+  /** Opt-in determinism sandbox: forbid Date/Math.random in the script body so a
+   *  run is reproducible (matches native dynamic-workflow's freeze-throw). */
+  strict?: boolean;
 };
 
 export type ParseResult =
@@ -190,6 +193,37 @@ function isLegacyShape(fn: Function): boolean {
   return !/^\s*(async\s+)?function\s*\*?\s*\(\s*\{|^\s*\(\s*\{|^\s*async\s*\(\s*\{/.test(src);
 }
 
+/** Run `fn` with Date/Math.random frozen to throw, restoring them after (even on
+ *  throw). Opt-in determinism: a `--strict` run fails loudly if the script reaches
+ *  for wall-clock or randomness, which would make a journal non-reproducible.
+ *  Scoped to the invoke and restored in finally — the engine's injected clock is
+ *  untouched, so journaling/resume still work. Mirrors native's freeze-throw. */
+async function withStrict<T>(strict: boolean | undefined, fn: () => T | Promise<T>): Promise<T> {
+  if (!strict) return await fn();
+  const RealDate = globalThis.Date;
+  const realRandom = Math.random;
+  const boom = (what: string): never => {
+    throw new Error(`omw --strict: ${what} is forbidden in a deterministic workflow (pass values in via args)`);
+  };
+  class StrictDate extends RealDate {
+    constructor(...args: any[]) {
+      if (args.length === 0) boom("new Date()");
+      super(...(args as [number]));
+    }
+    static now(): number {
+      return boom("Date.now()");
+    }
+  }
+  globalThis.Date = StrictDate as DateConstructor;
+  Math.random = () => boom("Math.random()");
+  try {
+    return await fn();
+  } finally {
+    globalThis.Date = RealDate;
+    Math.random = realRandom;
+  }
+}
+
 export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunOutcome> {
   let loaded: LoadedWorkflow;
   try {
@@ -253,7 +287,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
         "omw: deprecation — positional `rt` authoring is deprecated; destructure hooks `({ agent, ... }, args)`. Removed in 0.5. Run `omw codemod`.",
       );
     }
-    const result = await loaded.workflow(hooks, opts.args);
+    const result = await withStrict(opts.strict, () => loaded.workflow(hooks, opts.args));
     // internal_error is an AUTHOR bug (e.g. a JSON Schema that won't compile),
     // not a flaky node — the null-contract absorbs it so the run completes, but
     // we escalate to exit 4 so a caller (or authoring agent) doesn't read the
