@@ -430,6 +430,37 @@ describe("runWorkflow — --strict determinism sandbox", () => {
       globalThis.Date = REAL_DATE; // belt-and-suspenders so a failure can't poison the suite
     }
   });
+
+  test("withStrict restores globals even when patching partially fails mid-setup", async () => {
+    const REAL_DATE = globalThis.Date;
+    const REAL_RANDOM = Math.random;
+    // Freeze Math.random so the patch assignment throws AFTER Date was patched —
+    // the partial-patch hazard. The fix must still restore Date (not leave the
+    // throwing StrictDate installed).
+    Object.defineProperty(Math, "random", { value: REAL_RANDOM, writable: false, configurable: true });
+    try {
+      const loaded = {
+        workflow: async ({ agent }: any) => ({ x: await agent("go") }),
+        fake: { default: { text: "ok" as const } },
+      };
+      const out = await runWorkflow(
+        { wfPath: "w", agent: "fake", args: undefined, pretty: false, strict: true } as any,
+        {
+          loadWorkflow: async () => loaded as any,
+          resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter((wf as any).fake) }),
+          journalSink: () => {},
+          now: () => 0,
+          runId: () => "t",
+        },
+      );
+      expect(out.exitCode).toBe(1); // patching threw → script_error
+      expect(globalThis.Date).toBe(REAL_DATE); // …but Date was restored, not leaked
+      expect(() => Date.now()).not.toThrow();
+    } finally {
+      Object.defineProperty(Math, "random", { value: REAL_RANDOM, writable: true, configurable: true });
+      globalThis.Date = REAL_DATE;
+    }
+  });
 });
 
 describe("runWorkflow — resume passthrough", () => {

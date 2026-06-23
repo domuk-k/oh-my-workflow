@@ -228,26 +228,32 @@ let strictSavedRandom: () => number;
 
 async function withStrict<T>(strict: boolean | undefined, fn: () => T | Promise<T>): Promise<T> {
   if (!strict) return await fn();
-  if (strictDepth === 0) {
+  const entering = strictDepth === 0;
+  if (entering) {
+    // Snapshot the TRUE originals before any patch (a plain var write, can't throw).
     strictSavedDate = globalThis.Date;
     strictSavedRandom = Math.random;
-    const boom = (what: string): never => {
-      throw new Error(`omw --strict: ${what} is forbidden in a deterministic workflow (pass values in via args)`);
-    };
-    class StrictDate extends strictSavedDate {
-      constructor(...args: any[]) {
-        if (args.length === 0) boom("new Date()");
-        super(...(args as [number]));
-      }
-      static now(): number {
-        return boom("Date.now()");
-      }
-    }
-    globalThis.Date = StrictDate as DateConstructor;
-    Math.random = () => boom("Math.random()");
   }
+  // Increment and enter the try BEFORE patching, so a throw mid-patch (e.g. a
+  // frozen global) still hits finally and restores — no leaked StrictDate.
   strictDepth++;
   try {
+    if (entering) {
+      const boom = (what: string): never => {
+        throw new Error(`omw --strict: ${what} is forbidden in a deterministic workflow (pass values in via args)`);
+      };
+      class StrictDate extends strictSavedDate {
+        constructor(...args: any[]) {
+          if (args.length === 0) boom("new Date()");
+          super(...(args as [number]));
+        }
+        static now(): number {
+          return boom("Date.now()");
+        }
+      }
+      globalThis.Date = StrictDate as DateConstructor;
+      Math.random = () => boom("Math.random()");
+    }
     return await fn();
   } finally {
     strictDepth--;
