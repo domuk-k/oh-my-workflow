@@ -229,7 +229,11 @@ export function makeRuntime(deps: {
         // Count tokens whether the node succeeded or failed: a failed node that
         // still reported `usage` (error/refusal envelope) consumed real budget,
         // so a loop on a failing node trips the ceiling instead of spinning.
-        budgetState.spent += (r.ok ? r.meta.outputTokens : r.meta?.outputTokens) ?? 0;
+        // Guard the value: a buggy/custom adapter (the pluggable boundary) could
+        // hand back NaN, a negative, or a non-number — any of which would corrupt
+        // `spent` and silently disable the ceiling. Coerce junk to 0.
+        const tokens = r.meta?.outputTokens;
+        budgetState.spent += typeof tokens === "number" && Number.isFinite(tokens) && tokens > 0 ? tokens : 0;
       };
       // A fresh node invocation carrying this call's options. Built in one place
       // so the next InvokeRequest field is threaded once, not per call site.

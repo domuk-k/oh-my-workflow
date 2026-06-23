@@ -543,6 +543,25 @@ describe("runtime.budget — token accounting", () => {
     await expect(rt.agent("second")).rejects.toBeInstanceOf(BudgetExceededError);
   });
 
+  test("a malformed outputTokens (NaN/negative/non-number) does not corrupt the spend counter", async () => {
+    const journal = makeJournal({ now: () => 0 });
+    // A buggy/custom adapter reports junk token counts. spent must stay a sane
+    // non-negative number, else `spent >= total` breaks and the ceiling never trips.
+    const adapter = makeFakeAdapter({
+      rules: [
+        { match: (p) => p.includes("nan"), responses: [{ text: "x", outputTokens: NaN }] },
+        { match: (p) => p.includes("neg"), responses: [{ text: "x", outputTokens: -100 }] },
+        { match: (p) => p.includes("str"), responses: [{ text: "x", outputTokens: "100" as any }] },
+      ],
+    });
+    const rt = makeRuntime({ adapter, journal, budget: 50 });
+    await rt.agent("nan");
+    await rt.agent("neg");
+    await rt.agent("str");
+    expect(rt.budget.spent()).toBe(0); // all junk coerced to 0, not NaN/string/negative
+    expect(rt.budget.remaining()).toBe(50);
+  });
+
   test("a budget throw inside parallel() is swallowed to null (matches native)", async () => {
     const journal = makeJournal({ now: () => 0 });
     const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ text: "x", outputTokens: 99 }] }] });
