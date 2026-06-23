@@ -7,7 +7,7 @@
 import type { AgentPort, AgentResult, AgentFailureKind, InvokeRequest } from "./types";
 
 export type FakeResponse =
-  | { text: string; sessionId?: string; costUsd?: number }
+  | { text: string; sessionId?: string; costUsd?: number; outputTokens?: number }
   | { fail: AgentFailureKind; stderr?: string };
 
 export type FakeRule = {
@@ -28,7 +28,7 @@ function toResult(r: FakeResponse, durationMs: number): AgentResult {
   return {
     ok: true,
     text: r.text,
-    meta: { durationMs, sessionId: r.sessionId, costUsd: r.costUsd },
+    meta: { durationMs, sessionId: r.sessionId, costUsd: r.costUsd, outputTokens: r.outputTokens },
   };
 }
 

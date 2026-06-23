@@ -14,6 +14,14 @@ describe("makeFakeAdapter", () => {
     }
   });
 
+  test("invoke carries outputTokens from the response into meta", async () => {
+    const fake = makeFakeAdapter({
+      rules: [{ match: () => true, responses: [{ text: "x", outputTokens: 30 }] }],
+    });
+    const r = await fake.invoke({ prompt: "x" });
+    expect(r.ok && r.meta.outputTokens).toBe(30);
+  });
+
   test("advances through a response sequence, sticking on the last", async () => {
     const fake = makeFakeAdapter({
       rules: [{ match: () => true, responses: [{ text: "first" }, { text: "second" }] }],

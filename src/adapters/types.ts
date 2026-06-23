@@ -17,6 +17,9 @@ export type AgentResult =
         /** Present when the adapter supports session resume (claude --resume). */
         sessionId?: string;
         costUsd?: number;
+        /** Output tokens this node produced, when the adapter reports them.
+         *  Feeds budget accounting (the shared spend counter). */
+        outputTokens?: number;
       };
     }
   | {

@@ -26,6 +26,11 @@ describe("parseClaudeResult", () => {
     expect(r.meta.durationMs).toBe(golden.duration_ms);
   });
 
+  test("parseClaudeResult reads usage.output_tokens into meta", () => {
+    const r = parseClaudeResult({ type: "result", subtype: "success", result: "hi", duration_ms: 5, usage: { output_tokens: 42 } });
+    expect(r.ok && r.meta.outputTokens).toBe(42);
+  });
+
   test("is_error:true -> ok:false with subtype+result surfaced in stderr", () => {
     const errJson = {
       type: "result",

@@ -50,6 +50,7 @@ export function parseClaudeResult(raw: unknown): AgentResult {
       durationMs,
       sessionId: j.session_id as string | undefined,
       costUsd: j.total_cost_usd as number | undefined,
+      outputTokens: (j.usage as { output_tokens?: number } | undefined)?.output_tokens,
     },
   };
 }
