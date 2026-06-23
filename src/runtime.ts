@@ -92,6 +92,24 @@ export function makeLimiter(max: number) {
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+/** The semantic subset of a node's options — everything that changes WHAT the
+ *  node computes, and nothing cosmetic. The resume key hashes only this, so a
+ *  display-only change (label/phase) or a retry-policy tweak (timeoutMs/
+ *  maxRetries) re-uses the cached result instead of needlessly re-running. The
+ *  resolved model (after the opts>phase>meta chain) is passed in so a meta/phase
+ *  model change still busts the cache even when opts.model is unset. */
+function pickSemantic(opts: AgentOpts, model: string | undefined) {
+  return {
+    model,
+    schema: opts.schema,
+    effort: opts.effort,
+    isolation: opts.isolation,
+    agentType: opts.agentType,
+    cwd: opts.cwd,
+    inheritMcp: opts.inheritMcp,
+  };
+}
+
 /** The ONE documented exception to the null-contract: when a token budget is set
  *  and already exhausted, agent() throws this instead of returning null, so a
  *  budget-bounded loop terminates instead of silently spinning out null nodes.
@@ -170,7 +188,7 @@ export function makeRuntime(deps: {
     const phase = opts.phase ?? currentPhase;
     const model = resolveModel(opts, phase);
     const pHash = promptHash(prompt);
-    const oHash = optsHash(opts);
+    const oHash = optsHash(pickSemantic(opts, model));
     journal.agentStart({
       call,
       label: opts.label,

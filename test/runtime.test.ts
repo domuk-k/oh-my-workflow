@@ -310,6 +310,37 @@ describe("runtime.agent — resume (longest-unchanged-prefix cache)", () => {
   });
 });
 
+describe("runtime.agent — resume keys on semantic opts only", () => {
+  test("a cosmetic label change does not bust the cache (label excluded from key)", async () => {
+    const j1 = makeJournal({ now: () => 0 });
+    const a1 = countingAdapter();
+    const rt1 = makeRuntime({ adapter: a1, journal: j1 });
+    await rt1.agent("compute", { label: "a" });
+    expect(a1.calls()).toBe(1);
+
+    const j2 = makeJournal({ now: () => 0 });
+    const a2 = countingAdapter();
+    const resume = makeResumeIndex(j1.events());
+    const rt2 = makeRuntime({ adapter: a2, journal: j2, resume });
+    await rt2.agent("compute", { label: "b" }); // same prompt, different cosmetic label
+    expect(a2.calls()).toBe(0); // cache hit despite label change
+  });
+
+  test("a semantic opt change (model) DOES bust the cache", async () => {
+    const j1 = makeJournal({ now: () => 0 });
+    const a1 = countingAdapter();
+    const rt1 = makeRuntime({ adapter: a1, journal: j1 });
+    await rt1.agent("compute", { model: "m1" });
+
+    const j2 = makeJournal({ now: () => 0 });
+    const a2 = countingAdapter();
+    const resume = makeResumeIndex(j1.events());
+    const rt2 = makeRuntime({ adapter: a2, journal: j2, resume });
+    await rt2.agent("compute", { model: "m2" }); // different model → miss
+    expect(a2.calls()).toBe(1);
+  });
+});
+
 describe("runtime.agent — resume partial-failure recompute", () => {
   test("a prior failed node re-runs live while prior ok nodes stay cached", async () => {
     // Run 1: node A succeeds with a distinctive value; node B fails (timeout).
