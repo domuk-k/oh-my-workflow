@@ -116,13 +116,13 @@ const out = await agent("SCOPE the question into topics", {
   label: "scope",         // shows in the journal / --pretty tree (cosmetic; not in resume key)
   phase: "Scope",         // overrides the ambient phase() for this call (cosmetic)
   model: "smart",         // tier alias or raw model string, passed to the adapter
-  effort: "high",         // reasoning-effort hint (adapter maps it where supported)
+  effort: "high",         // reasoning-effort hint: low|medium|high|xhigh|max (adapter maps it where supported)
   agentType: "Explore",   // cross-vendor node profile (named agent persona)
   isolation: "worktree",  // run this node in a fresh ephemeral git worktree (cwd = the worktree)
   timeoutMs: 120_000,     // kill the subprocess after this; failure kind = "timeout"
   cwd: "/path/to/repo",   // run the agent in this directory
   maxRetries: 2,          // schema-gate retries (default 2 → up to 3 attempts)
-  inheritMcp: false,      // default: isolate from host MCP servers (fast). true = inherit (claude only)
+  inheritMcp: false,      // default: isolate from host MCP servers (fast). true = inherit (claude only; codex ignores)
 });
 ```
 

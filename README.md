@@ -77,13 +77,19 @@ from any host (Claude Code, Codex, opencode, a cron job), and the whole thing is
 a few hundred lines of standard TypeScript you can read.
 
 ```ts
-// native dynamic Workflow (inside Claude Code)        // omw (anywhere)
-export default async function ({ agent, parallel }) {  export default async function ({ agent, parallel }, args) {
-  const found = await parallel(                          const found = await parallel(
-    topics.map(t => () => agent(`research ${t}`))        topics.map(t => () => agent(`research ${t}`))
-  )                                                      )
-  return { found }                                       return { found: found.filter(Boolean) }
-}                                                      }
+// native dynamic Workflow — inside Claude Code
+export default async function ({ agent, parallel }) {
+  const found = await parallel(topics.map((t) => () => agent(`research ${t}`)));
+  return { found };
+}
+```
+
+```ts
+// omw — anywhere, same shape
+export default async function ({ agent, parallel }, args) {
+  const found = await parallel(topics.map((t) => () => agent(`research ${t}`)));
+  return { found: found.filter(Boolean) };
+}
 ```
 
 The script is nearly the same; what differs is what a node *is* and where it runs.
