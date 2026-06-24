@@ -15,14 +15,16 @@ const D = t.docs;
       <div>
         <div class="grp">{g.group}</div>
         {g.items.map((it: any) => (
-          <a class={it.active ? "active" : ""} href="#">{it.label}</a>
+          it.href
+            ? <a class={it.active ? "active" : ""} href={it.href}>{it.label}</a>
+            : <span class="soon">{it.label}<em>{D.soon}</em></span>
         ))}
       </div>
     ))}
   </aside>
 
   <main>
-    <div class="crumb">{D.crumb}</div>
+    <div id="top" class="crumb">{D.crumb}</div>
     <h1>{D.title}</h1>
     <p>{D.intro}</p>
 

@@ -50,19 +50,20 @@
     "adaptersHeading": "Adapters",
     "adaptersBody": "A node is a coding agent driven through its headless prompt→result CLI: fake, claude, codex, hermes, pi (planned). A missing CLI exits 3 with an install hint.",
     "toc": "On this page",
+    "soon": "soon",
     "sidebar": [
       {
         "group": "Start",
         "items": [
-          { "label": "Introduction", "active": true },
-          { "label": "Quickstart" },
+          { "label": "Introduction", "href": "#top", "active": true },
+          { "label": "Quickstart", "href": "#quickstart" },
           { "label": "The twin framing" }
         ]
       },
       {
         "group": "Authoring",
         "items": [
-          { "label": "Hooks: agent / parallel" },
+          { "label": "Hooks: agent / parallel", "href": "#hooks" },
           { "label": "pipeline vs parallel" },
           { "label": "Schemas & self-repair" },
           { "label": "budget & workflow()" }
@@ -71,7 +72,7 @@
       {
         "group": "Runtime",
         "items": [
-          { "label": "Adapters" },
+          { "label": "Adapters", "href": "#adapters" },
           { "label": "Resume & determinism" },
           { "label": "Exit codes" }
         ]

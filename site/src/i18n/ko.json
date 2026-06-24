@@ -50,19 +50,20 @@
     "adaptersHeading": "어댑터",
     "adaptersBody": "노드는 헤드리스 prompt→result CLI로 구동되는 코딩에이전트입니다: fake, claude, codex, hermes, pi(예정). CLI가 없으면 install hint와 함께 exit 3.",
     "toc": "이 페이지에서",
+    "soon": "준비 중",
     "sidebar": [
       {
         "group": "시작",
         "items": [
-          { "label": "소개", "active": true },
-          { "label": "퀵스타트" },
+          { "label": "소개", "href": "#top", "active": true },
+          { "label": "퀵스타트", "href": "#quickstart" },
           { "label": "트윈 프레이밍" }
         ]
       },
       {
         "group": "작성하기",
         "items": [
-          { "label": "훅: agent / parallel" },
+          { "label": "훅: agent / parallel", "href": "#hooks" },
           { "label": "pipeline vs parallel" },
           { "label": "스키마 & 자가수정" },
           { "label": "budget & workflow()" }
@@ -71,7 +72,7 @@
       {
         "group": "런타임",
         "items": [
-          { "label": "어댑터" },
+          { "label": "어댑터", "href": "#adapters" },
           { "label": "Resume & 결정성" },
           { "label": "종료 코드" }
         ]
