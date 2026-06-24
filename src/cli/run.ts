@@ -9,6 +9,7 @@ import type { AgentPort } from "../adapters/types";
 import { makeFakeAdapter, type FakeAdapterOptions } from "../adapters/fake";
 import { makeClaudeAdapter } from "../adapters/claude";
 import { makeCodexAdapter } from "../adapters/codex";
+import { makeHermesAdapter } from "../adapters/hermes";
 import type { Runtime, WorkflowMeta } from "../runtime";
 import { makeRuntime } from "../runtime";
 import { makeJournal, parseJournalLines, type JournalEvent } from "../journal";
@@ -377,6 +378,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
 const INSTALL_HINTS: Record<string, string> = {
   claude: "npm i -g @anthropic-ai/claude-code  (then `claude login`)",
   codex: "npm i -g @openai/codex  (experimental adapter)",
+  hermes: "install the Hermes Agent CLI, then `hermes login`  (experimental adapter)",
   pi: "see https://github.com/parallel-ai/pi  (experimental adapter)",
 };
 
@@ -398,6 +400,10 @@ export function resolveAdapter(
   if (name === "codex") {
     if (!binExists("codex")) return { missing: "codex", installHint: INSTALL_HINTS.codex! };
     return { adapter: makeCodexAdapter() };
+  }
+  if (name === "hermes") {
+    if (!binExists("hermes")) return { missing: "hermes", installHint: INSTALL_HINTS.hermes! };
+    return { adapter: makeHermesAdapter() };
   }
   // pi lands here as it is built; until then, fail actionably.
   return {
@@ -426,7 +432,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   if (!parsed.ok) {
     io.stderr(JSON.stringify({ error: "usage", message: parsed.error }));
     io.stderr(
-      "\nusage: omw run <workflow> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]",
+      "\nusage: omw run <workflow> --agent <fake|claude|codex|hermes|pi> [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]",
     );
     return 2;
   }

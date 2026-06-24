@@ -37,6 +37,18 @@ describe("resolveAdapter", () => {
     expect("missing" in r && r.missing).toBe("codex");
   });
 
+  test("hermes resolves to the real adapter when the CLI is on PATH", () => {
+    const r = resolveAdapter("hermes", { workflow: async () => ({}) }, () => true);
+    expect("adapter" in r && r.adapter.name).toBe("hermes");
+  });
+
+  test("hermes is adapter_missing (with install hint) when the CLI is absent", () => {
+    const r = resolveAdapter("hermes", { workflow: async () => ({}) }, () => false);
+    expect("missing" in r && r.missing).toBe("hermes");
+    if (!("missing" in r)) throw new Error("expected missing");
+    expect(r.installHint).toContain("Hermes");
+  });
+
   test("an unknown adapter is missing with a fake fallback hint", () => {
     const r = resolveAdapter("nope", { workflow: async () => ({}) }, () => false);
     expect("missing" in r && r.missing).toBe("nope");
