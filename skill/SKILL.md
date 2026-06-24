@@ -487,6 +487,7 @@ agents that expose such a CLI can be nodes.
 | **fake** | built-in, free, deterministic | in-process fixtures | as scripted | yes (fixture) |
 | **claude** | **full** (live-verified, claude 2.1.x) | `claude -p <p> --output-format json --strict-mcp-config` | parse `.result` | `--resume` (same cwd) |
 | **codex** | **experimental** (live-verified, codex 0.137.x) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` (same cwd) |
+| **hermes** | **experimental** | `hermes -z <prompt> --yolo` | stdout IS the response (heuristic JSON extract) | — (fresh retries) |
 | **pi** | planned | `pi --print` | stdout | — |
 | **kiro** | **not a fit** | — | — | — |
 
@@ -508,6 +509,10 @@ agents that expose such a CLI can be nodes.
   stays undefined), and its JSONL can include malformed lines under MCP
   (openai/codex#15451) — omw tolerates them line-by-line and fails *actionably*
   rather than returning empty. Default sandbox is `workspace-write`.
+- **hermes** is experimental: `-z/--oneshot` prints only the response text, so the
+  result is stdout (no JSON envelope; schema-gate extracts JSON heuristically).
+  `--yolo` runs it non-interactively. No in-session followUp (no session id on
+  stdout) → schema retries use fresh invokes. No cost field.
 - **pi** isn't wired yet (`--agent pi` → exit 3 with an install hint).
 - **kiro is excluded on purpose**: its CLI is a VS-Code-based IDE launcher, with
   no headless prompt→result interface — so it can't be an omw node.

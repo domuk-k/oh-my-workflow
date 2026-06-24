@@ -185,6 +185,7 @@ A node is a coding agent driven through its headless prompt→result CLI.
 | **fake** | built-in, free, deterministic | the no-key demo engine and test double |
 | **claude** | **full** (live-verified, 2.1.x) | `claude -p --output-format json --strict-mcp-config` (nodes isolated from host MCP by default; opt in per call with `inheritMcp`); `--resume` (same cwd) powers in-session schema self-repair. `effort`/`agentType` have no faithful CLI flag yet → dropped with a one-time warn (honest-scope) |
 | **codex** | **experimental** (live-verified, 0.137.x) | `codex exec --json`; **no cost field**; tolerates malformed JSONL ([openai/codex#15451](https://github.com/openai/codex/issues/15451)) and fails *actionably* |
+| **hermes** | **experimental** | `hermes -z <prompt> --yolo` (one-shot, prints only the response); no in-session followUp (schema retries go fresh); no cost field |
 | **pi** | planned | not wired yet (`--agent pi` → exit 3 + install hint) |
 
 A missing CLI exits `3` with an `install_hint` instead of failing mid-run. A node
