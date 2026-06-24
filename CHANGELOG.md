@@ -35,6 +35,11 @@ same authoring shape and vocabulary, external coding-agent CLI nodes, no magic.
 - **`omw codemod <file> [--to-di] [--write]`** — migrate legacy workflows to DI.
 - **`omw skill install --codex` / `--opencode`** — install the authoring skill for
   other coding agents (distinct dirs; never wipes a sibling install).
+- **`hermes` adapter** (experimental) — `--agent hermes` runs nodes via
+  `hermes -z <prompt> --yolo` (one-shot; stdout is the response). No in-session
+  followUp (schema retries go fresh).
+- **`conformance/` now ships in the package**, plus a `scripts/smoke-live.sh`
+  harness and a cross-host authoring runbook for testing adapters / host-authoring.
 
 ### Fixed
 
