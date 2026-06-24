@@ -1,9 +1,9 @@
 // Config-driven adapter for the simple "prompt in → response text out" coding-agent
 // CLI shape. Every adapter repeats the same spawn / timeout / exit-code / parse
 // boilerplate; this collapses it so a plain one-shot CLI is a few lines of config
-// instead of a bespoke ~100-line file.
+// instead of a hand-written ~100-line file.
 //
-// Use a bespoke adapter (claude.ts, codex.ts) when a CLI has real quirks the
+// Use a dedicated adapter (claude.ts, codex.ts) when a CLI has real quirks the
 // generic shape can't carry: a JSON/JSONL envelope, in-session resume (`followUp`,
 // which the schema gate uses for self-repair), a distinct refusal signal, or a
 // cost field. This generic adapter has NO followUp on purpose — a config-only CLI
