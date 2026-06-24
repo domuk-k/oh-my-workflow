@@ -1,0 +1,27 @@
+---
+import "../styles/global.css";
+import Nav from "../components/Nav.astro";
+import type { Lang } from "../i18n/paths";
+
+interface Props {
+  lang: Lang;
+  page: "home" | "docs";
+  t: any;
+}
+const { lang, page, t } = Astro.props;
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{t.meta.title}</title>
+    <meta name="description" content={t.meta.desc} />
+  </head>
+  <body>
+    <Nav lang={lang} page={page} t={t} />
+    <slot />
+    <footer class="site">oh-my-workflow · MIT · the open twin of dynamic Workflow</footer>
+  </body>
+</html>

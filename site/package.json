@@ -1,0 +1,16 @@
+{
+  "name": "@oh-my-workflow/site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Marketing landing + docs site for oh-my-workflow (Astro, static, ko/en).",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "astro": "^7.0.2"
+  }
+}

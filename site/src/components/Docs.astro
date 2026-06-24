@@ -1,0 +1,55 @@
+---
+import type { Lang } from "../i18n/paths";
+
+interface Props {
+  lang: Lang;
+  t: any;
+}
+const { t } = Astro.props;
+const D = t.docs;
+---
+
+<div class="docs">
+  <aside>
+    {D.sidebar.map((g: any) => (
+      <div>
+        <div class="grp">{g.group}</div>
+        {g.items.map((it: any) => (
+          <a class={it.active ? "active" : ""} href="#">{it.label}</a>
+        ))}
+      </div>
+    ))}
+  </aside>
+
+  <main>
+    <div class="crumb">{D.crumb}</div>
+    <h1>{D.title}</h1>
+    <p>{D.intro}</p>
+
+    <h2 id="quickstart">{D.quickstartHeading}</h2>
+    <p>{D.quickstartBody}</p>
+    <pre>git clone https://github.com/domuk-k/oh-my-workflow &amp;&amp; cd oh-my-workflow
+bun install
+bun src/cli/omw.ts run examples/deep-research --agent fake --pretty</pre>
+
+    <h2 id="hooks">{D.hooksHeading}</h2>
+    <div class="api">
+      <code class="sig">agent(prompt, opts?) → Promise&lt;T | null&gt;</code>
+      <p>{D.hookAgentBody}</p>
+    </div>
+    <div class="api">
+      <code class="sig">pipeline(items, …stages) · parallel(thunks)</code>
+      <p>{D.hookFlowBody}</p>
+    </div>
+
+    <h2 id="adapters">{D.adaptersHeading}</h2>
+    <p>{D.adaptersBody}</p>
+  </main>
+
+  <nav class="toc">
+    <div class="t">{D.toc}</div>
+    {D.tocItems.map((it: any) => (
+      <a href={it.href}>{it.label}</a>
+    ))}
+  </nav>
+</div>

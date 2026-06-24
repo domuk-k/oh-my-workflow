@@ -1,0 +1,90 @@
+{
+  "lang": "ko",
+  "meta": {
+    "title": "oh-my-workflow — 오픈 dynamic-workflow 런타임",
+    "desc": "Claude Code의 native dynamic Workflow의 이식 가능한 쌍둥이. 노드가 통째 코딩에이전트 CLI인 plain-JS 오케스트레이션."
+  },
+  "nav": {
+    "home": "홈",
+    "docs": "문서",
+    "skill": "스킬",
+    "github": "GitHub",
+    "langLabel": "English"
+  },
+  "landing": {
+    "pill": "Claude Code dynamic Workflow의 오픈 트윈",
+    "tagline": "plain-JS 오케스트레이션 스크립트를 씁니다. 노드는 이미 가진 코딩에이전트 CLI 통째예요 — claude -p, codex exec, hermes. omw는 얇고 읽히는 글루.",
+    "ctaPrimary": "API 키 없이 무료로 실행",
+    "ctaSecondary": "문서 보기 →",
+    "twinHeading": "네이티브 도구와 같은 모양. 어디서든.",
+    "twinSub": "스크립트는 거의 동일합니다 — 다른 건 노드가 무엇이고 어디서 도느냐뿐.",
+    "twinNativeLabel": "native dynamic Workflow — Claude Code 안",
+    "twinOpenLabel": "omw — 어디서든, 같은 모양",
+    "honestHeading": "트레이드오프에 정직하게",
+    "honestTitle": "raw-API 오케스트레이터보다 느리고 비쌉니다 — 의도된 선택입니다.",
+    "honestBody": "노드는 completion 하나가 아니라 코딩에이전트 통째예요: repo를 읽고, 도구를 돌리고, 반복합니다. 노드마다 프로세스+에이전트 루프 오버헤드를 냅니다. 대신 얻는 것: 모델이 아니라 에이전트를 오케스트레이션한다는 점 — 그리고 Claude Code 자신이 이 패턴을 내부에서 그대로 씁니다. omw는 그 이식 가능한 트윈이고, 트레이드오프를 숨기지 않고 밝힙니다.",
+    "adaptersHeading": "원하는 에이전트를 꽂으세요",
+    "colAdapter": "어댑터",
+    "colStatus": "상태",
+    "colNotes": "비고",
+    "adapters": [
+      { "name": "fake", "status": "내장", "kind": "full", "notes": "키 없이 도는 결정적 데모 + 테스트 더블" },
+      { "name": "claude", "status": "정식", "kind": "full", "notes": "JSON 출력 + --resume 으로 세션 내 스키마 자가수정" },
+      { "name": "codex", "status": "실험적", "kind": "exp", "notes": "깨진 JSONL을 견디고 실행 가능하게 실패" },
+      { "name": "hermes", "status": "실험적", "kind": "exp", "notes": "원샷; 스키마 재시도는 새 세션으로" },
+      { "name": "pi", "status": "예정", "kind": "plan", "notes": "아직 미연결" }
+    ]
+  },
+  "docs": {
+    "crumb": "시작 / 소개",
+    "title": "소개",
+    "intro": "oh-my-workflow(omw)는 Claude Code의 native dynamic Workflow의 오픈·이식 가능한 트윈입니다. 노드가 통째 코딩에이전트 CLI인 plain-JS 오케스트레이션 스크립트를 작성하면, omw가 스크립트를 실행하고 각 노드 출력을 스키마로 검증하며 모든 단계를 저널에 기록합니다.",
+    "quickstartHeading": "퀵스타트",
+    "quickstartBody": "API 키도 네트워크도 없이 — 내장 fake 어댑터가 전체 척추를 돌립니다:",
+    "hooksHeading": "훅(hooks)",
+    "hookAgentBody": "코딩에이전트 CLI 노드 하나를 실행합니다. schema를 주면 omw가 검증하고 오류를 노드에 다시 물려 최대 2회 재프롬프트합니다. 절대 throw하지 않습니다(null-contract) — budget 소진만 예외.",
+    "hookFlowBody": "아이템별 흐름 vs. 배리어. 기본은 pipeline.",
+    "adaptersHeading": "어댑터",
+    "adaptersBody": "노드는 헤드리스 prompt→result CLI로 구동되는 코딩에이전트입니다: fake, claude, codex, hermes, pi(예정). CLI가 없으면 install hint와 함께 exit 3.",
+    "toc": "이 페이지에서",
+    "sidebar": [
+      {
+        "group": "시작",
+        "items": [
+          { "label": "소개", "active": true },
+          { "label": "퀵스타트" },
+          { "label": "트윈 프레이밍" }
+        ]
+      },
+      {
+        "group": "작성하기",
+        "items": [
+          { "label": "훅: agent / parallel" },
+          { "label": "pipeline vs parallel" },
+          { "label": "스키마 & 자가수정" },
+          { "label": "budget & workflow()" }
+        ]
+      },
+      {
+        "group": "런타임",
+        "items": [
+          { "label": "어댑터" },
+          { "label": "Resume & 결정성" },
+          { "label": "종료 코드" }
+        ]
+      },
+      {
+        "group": "레퍼런스",
+        "items": [
+          { "label": "CLI: omw run" },
+          { "label": "omw skill install" }
+        ]
+      }
+    ],
+    "tocItems": [
+      { "label": "퀵스타트", "href": "#quickstart" },
+      { "label": "훅(hooks)", "href": "#hooks" },
+      { "label": "어댑터", "href": "#adapters" }
+    ]
+  }
+}

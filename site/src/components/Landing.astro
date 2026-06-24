@@ -1,0 +1,68 @@
+---
+import { docsHref, githubHref } from "../i18n/paths";
+import type { Lang } from "../i18n/paths";
+
+interface Props {
+  lang: Lang;
+  t: any;
+}
+const { lang, t } = Astro.props;
+const L = t.landing;
+---
+
+<section class="hero">
+  <div class="wrap">
+    <span class="pill">{L.pill}</span>
+    <h1>oh-my-workflow</h1>
+    <p>{L.tagline}</p>
+    <div class="cta">
+      <a class="btn primary" href={githubHref()}>{L.ctaPrimary}</a>
+      <a class="btn ghost" href={docsHref(lang)}>{L.ctaSecondary}</a>
+    </div>
+  </div>
+</section>
+
+<div class="wrap section">
+  <h2>{L.twinHeading}</h2>
+  <p class="sub">{L.twinSub}</p>
+  <div class="twin">
+    <div>
+      <div class="lab">{L.twinNativeLabel}</div>
+      <pre><span class="k">export default async function</span> ({"{"} agent, parallel {"}"}) {"{"}
+  <span class="k">const</span> found = <span class="k">await</span> parallel(
+    topics.map((t) =&gt; () =&gt; agent(<span class="s">`research $&#123;t&#125;`</span>)));
+  <span class="k">return</span> {"{"} found {"}"};
+{"}"}</pre>
+    </div>
+    <div>
+      <div class="lab open">{L.twinOpenLabel}</div>
+      <pre><span class="k">export default async function</span> ({"{"} agent, parallel {"}"}, args) {"{"}
+  <span class="k">const</span> found = <span class="k">await</span> parallel(
+    topics.map((t) =&gt; () =&gt; agent(<span class="s">`research $&#123;t&#125;`</span>)));
+  <span class="k">return</span> {"{"} found: found.filter(Boolean) {"}"};
+{"}"}</pre>
+    </div>
+  </div>
+
+  <h2>{L.honestHeading}</h2>
+  <div class="honest">
+    <h3>{L.honestTitle}</h3>
+    <p>{L.honestBody}</p>
+  </div>
+
+  <h2>{L.adaptersHeading}</h2>
+  <table class="adapters">
+    <thead>
+      <tr><th>{L.colAdapter}</th><th>{L.colStatus}</th><th>{L.colNotes}</th></tr>
+    </thead>
+    <tbody>
+      {L.adapters.map((a: any) => (
+        <tr>
+          <td><code>{a.name}</code></td>
+          <td><span class={`tag ${a.kind}`}>{a.status}</span></td>
+          <td>{a.notes}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
