@@ -10,17 +10,17 @@ const { lang, t } = Astro.props;
 const L = t.landing;
 ---
 
-<section class="hero">
-  <div class="wrap">
+<header class="hero">
+  <div class="wrap reveal">
     <span class="pill">{L.pill}</span>
     <h1>oh-my-workflow</h1>
-    <p>{L.tagline}</p>
+    <p class="lede" set:html={L.tagline}></p>
     <div class="cta">
-      <a class="btn primary" href={githubHref()}>{L.ctaPrimary}</a>
-      <a class="btn ghost" href={docsHref(lang)}>{L.ctaSecondary}</a>
+      <a class="btn primary" href={docsHref(lang)}>{L.ctaPrimary}</a>
+      <a class="btn ghost" href={githubHref()}>{L.ctaSecondary}</a>
     </div>
   </div>
-</section>
+</header>
 
 <div class="wrap section">
   <h2>{L.twinHeading}</h2>
@@ -36,16 +36,18 @@ const L = t.landing;
     </div>
     <div>
       <div class="lab open">{L.twinOpenLabel}</div>
-      <pre><span class="k">export default async function</span> ({"{"} agent, parallel {"}"}, args) {"{"}
+      <pre><span class="k">export default async function</span> ({"{"} agent, parallel {"}"}<mark class="ins">, args</mark>) {"{"}
   <span class="k">const</span> found = <span class="k">await</span> parallel(
     topics.map((t) =&gt; () =&gt; agent(<span class="s">`research $&#123;t&#125;`</span>)));
-  <span class="k">return</span> {"{"} found: found.filter(Boolean) {"}"};
+  <span class="k">return</span> {"{"} found: <mark class="ins">found.filter(Boolean)</mark> {"}"};
 {"}"}</pre>
     </div>
   </div>
+  <p class="difflegend" set:html={L.diffLegend}></p>
 
   <h2>{L.honestHeading}</h2>
   <div class="honest">
+    <p class="marknote">{L.honestNote}</p>
     <h3>{L.honestTitle}</h3>
     <p>{L.honestBody}</p>
   </div>

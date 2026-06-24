@@ -4,6 +4,7 @@
     "title": "oh-my-workflow — 오픈 dynamic-workflow 런타임",
     "desc": "Claude Code의 native dynamic Workflow의 이식 가능한 쌍둥이. 노드가 통째 코딩에이전트 CLI인 plain-JS 오케스트레이션."
   },
+  "footer": "dynamic Workflow의 오픈 트윈",
   "nav": {
     "home": "홈",
     "docs": "문서",
@@ -13,14 +14,16 @@
   },
   "landing": {
     "pill": "Claude Code dynamic Workflow의 오픈 트윈",
-    "tagline": "plain-JS 오케스트레이션 스크립트를 씁니다. 노드는 이미 가진 코딩에이전트 CLI 통째예요 — claude -p, codex exec, hermes. omw는 얇고 읽히는 글루.",
-    "ctaPrimary": "API 키 없이 무료로 실행",
-    "ctaSecondary": "문서 보기 →",
+    "tagline": "plain-JS 오케스트레이션 스크립트를 씁니다. 노드는 이미 가진 코딩에이전트 CLI 통째예요 — <code>claude -p</code>, <code>codex exec</code>, <code>hermes</code>. omw는 얇고 읽히는 글루.",
+    "ctaPrimary": "퀵스타트 — API 키 불필요",
+    "ctaSecondary": "소스 보기",
     "twinHeading": "네이티브 도구와 같은 모양. 어디서든.",
     "twinSub": "스크립트는 거의 동일합니다 — 다른 건 노드가 무엇이고 어디서 도느냐뿐.",
     "twinNativeLabel": "native dynamic Workflow — Claude Code 안",
     "twinOpenLabel": "omw — 어디서든, 같은 모양",
+    "diffLegend": "<mark class=\"ins\">표시</mark> = 달라지는 건 이 두 군데뿐.",
     "honestHeading": "트레이드오프에 정직하게",
+    "honestNote": "✱ 노트",
     "honestTitle": "raw-API 오케스트레이터보다 느리고 비쌉니다 — 의도된 선택입니다.",
     "honestBody": "노드는 completion 하나가 아니라 코딩에이전트 통째예요: repo를 읽고, 도구를 돌리고, 반복합니다. 노드마다 프로세스+에이전트 루프 오버헤드를 냅니다. 대신 얻는 것: 모델이 아니라 에이전트를 오케스트레이션한다는 점 — 그리고 Claude Code 자신이 이 패턴을 내부에서 그대로 씁니다. omw는 그 이식 가능한 트윈이고, 트레이드오프를 숨기지 않고 밝힙니다.",
     "adaptersHeading": "원하는 에이전트를 꽂으세요",

@@ -18,10 +18,26 @@ const { lang, page, t } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{t.meta.title}</title>
     <meta name="description" content={t.meta.desc} />
+    <meta name="color-scheme" content="light" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"
+    />
   </head>
   <body>
     <Nav lang={lang} page={page} t={t} />
     <slot />
-    <footer class="site">oh-my-workflow · MIT · the open twin of dynamic Workflow</footer>
+    <footer class="site">
+      <div class="wrap">
+        <b>oh-my-workflow</b> · MIT · {t.footer}
+      </div>
+    </footer>
   </body>
 </html>
