@@ -1,12 +1,13 @@
 ---
 name: omw
-description: Use when a task decomposes into multiple coding-agent CLI calls (claude -p / codex exec) that should run as one structured, schema-gated, journaled workflow — fan-out search, verify-vote, pipeline, or loop-until-dry. Teaches you to author a plain-JS omw script, run it with `omw run`, read the JSONL journal, and repair your own script from structured failures.
+description: Use when a task decomposes into multiple coding-agent calls that should run as one structured, schema-gated, journaled workflow — fan-out search, verify-vote, pipeline, or loop-until-dry. Teaches you to author a plain-JS omw script, run it with `omw run` or an in-session host callback, read the JSONL journal, and repair your own script from structured failures.
 ---
 
 # oh-my-workflow (omw)
 
 You write a **plain-JS orchestration script**. Its nodes are whole coding-agent
-CLIs you already pay for (`claude -p`, `codex exec`). omw is the thin glue: it
+CLIs you already pay for (`claude -p`, `codex exec`) or, when the current host
+exposes one, an in-session agent/subagent callback. omw is the thin glue: it
 runs your script, schema-gates each node's output, and journals every step — so
 you can read your own failure and fix your own script. (What's "deterministic" is
 scoped below — the engine's guarantees and `--agent fake`, not your script unless
@@ -14,10 +15,11 @@ you pass `--strict`.)
 
 omw is the **open twin of Claude Code's native dynamic Workflow**: the same
 authoring shape and vocabulary (`agent` / `parallel` / `pipeline` / `workflow` /
-`budget`), but the nodes are *external coding-agent CLIs*, it runs from any host,
-and there is **no magic** — no source transform, no ambient globals, no
-sandbox-by-default. Your script is ordinary JavaScript; the runtime hands it a
-**hooks object** as the first argument. There is no DSL to learn.
+`budget`). The default node transport is an external coding-agent CLI; the
+in-session bridge lets a capable host provide the transport directly. There is
+**no magic** — no source transform, no ambient globals, no sandbox-by-default.
+Your script is ordinary JavaScript; the runtime hands it a **hooks object** as
+the first argument. There is no DSL to learn.
 
 ## When to use this
 
@@ -36,8 +38,8 @@ bad node never crashes the run.
 
 **Don't** use omw for a single agent call, or where a node is a single raw LLM
 API call (that's LangGraph/Mastra territory; an omw node is a *whole coding
-agent*). omw has no sandbox by default — your script is trusted code — though you
-can opt into a determinism sandbox with `--strict`.
+agent turn*). omw has no sandbox by default — your script is trusted code —
+though you can opt into a determinism sandbox with `--strict`.
 
 ## The 30-second free demo (no API key, nothing to clone)
 
@@ -361,13 +363,28 @@ while (budget.total && budget.remaining() > 50_000) {
 ## The run → journal → fix loop (this is the UX)
 
 ```sh
-bunx github:domuk-k/oh-my-workflow run my-workflow.ts --args '{"q":"…"}' --pretty
+bunx github:domuk-k/oh-my-workflow run my-workflow.js --args '{"q":"…"}' --pretty
 ```
 
 - **stdout** = the result JSON, one blob. Pipe it, parse it.
 - **journal** = `.omw/<runId>.jsonl`, one event per line. This is where you read
   *why* a node failed and repair your script.
 - **`--pretty`** = a phase/fan-out tree on **stderr** (never stdout).
+
+### In-session execution
+
+When this skill is running inside a coding-agent host that can call subagents or
+task agents directly, the intended flow is:
+
+1. Write a portable `workflow.js`.
+2. Build a tiny host runner that imports `workflow.js`, creates
+   `makeRuntime({ adapter: makeInSessionAdapter({ invoke }) })`, and maps
+   `invoke(req)` to the host's own agent/subagent callback.
+3. Run that host runner immediately in the same session.
+
+Do not put host-specific APIs in `workflow.js`. The workflow should keep working
+under `omw run workflow.js --agent fake|claude|codex`; only the runner changes
+between hosts.
 
 ### Exit codes
 
@@ -433,14 +450,18 @@ load/fixture problem.
 
 ## Conventions (follow these)
 
-1. **Build on the null-contract.** `agent()` returns `null`, never throws (except
+1. **Write the workflow as `workflow.js` by default.** omw scripts are plain
+   JavaScript modules; TypeScript is optional, but `.js` is the most portable
+   artifact across coding-agent hosts. Keep host-specific in-session glue in a
+   separate runner, never inside the workflow file.
+2. **Build on the null-contract.** `agent()` returns `null`, never throws (except
    `BudgetExceededError` at the ceiling). `.filter(Boolean)` after every
    `parallel`/`pipeline`. For votes, require a quorum of *cast* (non-null) results
    so all-abstain can't pass.
-2. **Always pass a `schema` when you need structured data.** The gate's
+3. **Always pass a `schema` when you need structured data.** The gate's
    self-repair is the one genuine differentiator — use it instead of parsing
    prose yourself. Keep schemas tight (`required` + types).
-3. **Stay deterministic.** Don't branch the *shape* of the run on `Date.now()` /
+4. **Stay deterministic.** Don't branch the *shape* of the run on `Date.now()` /
    `Math.random()` / wall-clock. The resume key is the **semantic** subset of
    `(callIndex, promptHash, optsHash)` — cosmetic `label`/`phase` changes don't
    bust the cache, but `model`/`schema`/`effort`/`isolation` do. If a re-run's
@@ -448,9 +469,9 @@ load/fixture problem.
    by index, not by randomness. omw can't enforce determinism by default (no
    sandbox) — but pass **`--strict`** to freeze `Date`/`Math.random` to throw for
    a reproducible run.
-4. **stdout is for the machine.** Return your result; use `log` / `--pretty`
+5. **stdout is for the machine.** Return your result; use `log` / `--pretty`
    for humans. Never `console.log` to stdout from a workflow.
-5. **Ship a `fake` fixture for your example.** Export `const fake` alongside your
+6. **Ship a `fake` fixture for your example.** Export `const fake` alongside your
    default export so `--agent fake` runs deterministically with no key. The shape:
 
    ```ts
@@ -480,8 +501,9 @@ load/fixture problem.
 
 ## Adapters
 
-A node is a coding agent driven through its **headless prompt→result CLI**. Only
-agents that expose such a CLI can be nodes.
+A node is a whole coding-agent turn. Most adapters drive a **headless
+prompt→result CLI**; the `in-session` bridge is for hosts that can provide an
+agent/subagent callback directly.
 
 | adapter | status | invoke | structured out | in-session follow-up |
 |---|---|---|---|---|
@@ -490,7 +512,7 @@ agents that expose such a CLI can be nodes.
 | **codex** | **experimental** (live-verified, codex 0.137.x) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` (same cwd) |
 | **hermes** | **experimental** | `hermes -z <prompt> --yolo` | stdout IS the response (heuristic JSON extract) | — (fresh retries) |
 | **pi** | planned | `pi --print` | stdout | — |
-| **kiro** | **not a fit** | — | — | — |
+| **in-session** | **experimental bridge** | injected host callback | extracted summary/text | — (fresh retries) |
 
 > The "in-session follow-up" column is the adapter flag the **schema gate** uses to
 > re-prompt a node in the same session — *not* run-level resume. Run-level resume
@@ -515,8 +537,30 @@ agents that expose such a CLI can be nodes.
   `--yolo` runs it non-interactively. No in-session followUp (no session id on
   stdout) → schema retries use fresh invokes. No cost field.
 - **pi** isn't wired yet (`--agent pi` → exit 3 with an install hint).
-- **kiro is excluded on purpose**: its CLI is a VS-Code-based IDE launcher, with
-  no headless prompt→result interface — so it can't be an omw node.
+- **in-session** is not a normal `omw run --agent <name>` subprocess adapter.
+  It is an experimental bridge for any coding-agent host that can provide an
+  agent/subagent callback. The workflow stays portable JavaScript
+  (`workflow.js`); host-specific glue lives in the runner:
+
+  ```ts
+  import { makeRuntime } from "oh-my-workflow";
+  import { makeJournal } from "oh-my-workflow/journal";
+  import { makeInSessionAdapter } from "oh-my-workflow/adapters/in-session";
+
+  const workflow = await import("./workflow.js");
+  const adapter = makeInSessionAdapter({
+    name: "current-session",
+    invoke: async (req) => {
+      // Host-specific: call the current coding agent's subagent/task API here.
+      return hostAgent(req.prompt, req);
+    },
+  });
+
+  const rt = makeRuntime({ adapter, journal: makeJournal(), concurrency: 4 });
+  const result = await workflow.default(rt, {});
+  ```
+
+  If the host does not expose such a callback, use the CLI adapters instead.
 
 Missing CLI → exit 3 with `install_hint`. Run `--agent fake` any time for the
 free path. `--agent auto` is the default: it honors `OMW_AGENT`, then host
@@ -590,7 +634,7 @@ but cross-CLI routing is future work). Don't write scripts that assume these.
 ## Quick reference
 
 - Module: `export default async ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result` · optional `export const meta` / `export const fake`. (Legacy `(rt, args)` still runs; `omw codemod <file>` migrates it.)
-- Path resolves a directory to `workflow.ts` / `workflow.js` / `index.ts` / `index.js`.
+- Path resolves a directory to `workflow.js` / `workflow.ts` / `index.js` / `index.ts`.
 - `omw run <wf> [--agent <auto|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]`
 - `omw replay <journal.jsonl> [--json]`
 - `omw validate <wf> [--json]` — pre-flight: load + fake-fixture lint, no agents spawned.
