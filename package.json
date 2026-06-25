@@ -23,7 +23,10 @@
   "bugs": "https://github.com/domuk-k/oh-my-workflow/issues",
   "exports": {
     ".": "./src/runtime.ts",
+    "./journal": "./src/journal.ts",
     "./adapters/fake": "./src/adapters/fake.ts",
+    "./adapters/in-session": "./src/adapters/in-session.ts",
+    "./adapters/types": "./src/adapters/types.ts",
     "./package.json": "./package.json"
   },
   "types": "./src/runtime.ts",

@@ -178,11 +178,14 @@ bunx github:domuk-k/oh-my-workflow skill install --project    # → ./.claude/sk
 ```
 
 Then ask your coding agent with `/omw <task>`. It authors a workflow file, runs it
-with `omw run`, and uses the JSONL journal to repair failures.
+with `omw run`, and uses the JSONL journal to repair failures. Prefer a portable
+`workflow.js`; capable hosts can run it in-session through the `in-session`
+bridge instead of spawning a CLI node.
 
 ## Adapters
 
-A node is a coding agent driven through its headless prompt→result CLI.
+Most nodes are coding agents driven through a headless prompt→result CLI. The
+`in-session` bridge covers hosts that can provide an agent callback directly.
 
 | adapter | status | notes |
 |---|---|---|
@@ -191,12 +194,18 @@ A node is a coding agent driven through its headless prompt→result CLI.
 | **claude** | **full** (live-verified, 2.1.x) | `claude -p --output-format json --strict-mcp-config` (nodes isolated from host MCP by default; opt in per call with `inheritMcp`); `--resume` (same cwd) powers in-session schema self-repair. `effort`/`agentType` have no faithful CLI flag yet → dropped with a one-time warn (honest-scope) |
 | **codex** | **experimental** (live-verified, 0.137.x) | `codex exec --json`; **no cost field**; tolerates malformed JSONL ([openai/codex#15451](https://github.com/openai/codex/issues/15451)) and fails *actionably* |
 | **hermes** | **experimental** | `hermes -z <prompt> --yolo` (one-shot, prints only the response); no in-session followUp (schema retries go fresh); no cost field |
+| **in-session** | **experimental bridge** | wraps a host-provided agent/subagent callback; not a normal subprocess CLI adapter |
 | **pi** | planned | not wired yet (`--agent pi` → exit 3 + install hint) |
 
 A missing CLI exits `3` with an `install_hint` instead of failing mid-run. A node
 that hits `internal_error` (e.g. an invalid JSON Schema) escalates the run to exit
 `4` (result still on stdout) so an author bug doesn't hide behind the null-contract.
 `omw validate <wf>` is a pre-flight load + fake-fixture lint that spawns no agents.
+
+`in-session` is intentionally outside the normal `omw run --agent <name>` path.
+It is for coding-agent hosts that can pass a callback into `makeRuntime()` and
+run the workflow in the current session. Keep workflow files portable
+(`workflow.js`); keep host-specific callback glue in the runner.
 
 ## Migrating from 0.3 (`(rt, args)` → destructured DI)
 
@@ -208,8 +217,8 @@ deprecation notice on legacy scripts; the bridge is removed in 0.5.
 Migrate mechanically:
 
 ```sh
-omw codemod path/to/workflow.ts            # prints the destructured-DI version
-omw codemod path/to/workflow.ts --write    # rewrites in place
+omw codemod path/to/workflow.js            # prints the destructured-DI version
+omw codemod path/to/workflow.js --write    # rewrites in place
 ```
 
 ## Honest scope (read before you judge the novelty)
