@@ -39,6 +39,10 @@ for (const id of ["quickstart", "api", "patterns", "deploy"]) {
 }
 
 add("site has meta description", /<meta\s+name="description"\s+content="[^"]{80,180}"/.test(html));
+add("site has canonical URL", html.includes('<link rel="canonical" href="https://oh-my-workflow.vercel.app/"'));
+add("site has Open Graph title", html.includes('property="og:title"'));
+add("site has Twitter card", html.includes('name="twitter:card"'));
+add("site has favicon", html.includes('rel="icon"'));
 add("site has accessible nav label", html.includes('aria-label="Primary navigation"'));
 add("site has no placeholder words", !/\b(TODO|TBD|lorem|placeholder)\b/i.test(html + "\n" + launchText));
 add("launch note has title", /^Title:\n\n> Show HN:/m.test(launchText));
