@@ -177,6 +177,18 @@ describe("makeClaudeAdapter (injected spawn)", () => {
     expect(opts[0]?.cwd).toBe("/repo/under/review");
   });
 
+  test("followUp forwards timeoutMs so schema repair cannot hang forever", async () => {
+    const opts: any[] = [];
+    const adapter = makeClaudeAdapter({
+      spawn: async (_args, spawnOpts) => {
+        opts.push(spawnOpts);
+        return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
+      },
+    });
+    await adapter.followUp!("sess-123", "and again", { timeoutMs: 777 });
+    expect(opts[0]?.timeoutMs).toBe(777);
+  });
+
   // The node is isolated from the host's MCP servers by default (booting them is
   // the dominant fan-out latency); inheritMcp opts back in.
   test("invoke adds --strict-mcp-config by default, omits it when inheritMcp", async () => {

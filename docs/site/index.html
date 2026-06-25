@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="oh-my-workflow adds a slash-command workflow mode to coding agents, backed by schema-gated coding-agent CLI nodes and a JSONL journal."
+    />
+    <title>oh-my-workflow docs</title>
+    <style>
+      :root {
+        --ink: #151515;
+        --muted: #5c625f;
+        --paper: #fbfaf7;
+        --line: #d9d5ca;
+        --trace: #113f3a;
+        --signal: #c4442e;
+        --code: #f1eee6;
+        --panel: #ffffff;
+        --focus: #1f6feb;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--paper);
+        font-family:
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.55;
+      }
+
+      a {
+        color: inherit;
+        text-decoration-color: var(--signal);
+        text-decoration-thickness: 2px;
+        text-underline-offset: 4px;
+      }
+
+      a:focus-visible,
+      button:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 3px;
+      }
+
+      .shell {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: color-mix(in srgb, var(--paper) 94%, transparent);
+        border-bottom: 1px solid var(--line);
+        backdrop-filter: blur(12px);
+      }
+
+      nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 62px;
+        gap: 20px;
+      }
+
+      .brand {
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .navlinks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(340px, 0.82fr);
+        gap: 44px;
+        align-items: center;
+        padding: 64px 0 56px;
+      }
+
+      .eyebrow {
+        margin: 0 0 18px;
+        color: var(--signal);
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        max-width: 760px;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(52px, 6vw, 84px);
+        font-weight: 700;
+      }
+
+      h2 {
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(34px, 5vw, 62px);
+      }
+
+      h3 {
+        font-size: 20px;
+      }
+
+      .lead {
+        max-width: 710px;
+        margin: 24px 0 0;
+        color: var(--muted);
+        font-size: 20px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 28px;
+      }
+
+      .button {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--ink);
+        border-radius: 6px;
+        padding: 10px 16px;
+        background: var(--ink);
+        color: var(--paper);
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .button.secondary {
+        background: transparent;
+        color: var(--ink);
+      }
+
+      .trace-card {
+        border: 1px solid var(--trace);
+        background: #f4f7f2;
+        box-shadow: 10px 10px 0 var(--trace);
+      }
+
+      .trace-head {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--trace);
+        padding: 12px 14px;
+        color: var(--trace);
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .trace-body {
+        padding: 18px;
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 13px;
+      }
+
+      .trace-line {
+        display: grid;
+        grid-template-columns: 80px 1fr auto;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(17, 63, 58, 0.16);
+      }
+
+      .trace-line:last-child {
+        border-bottom: 0;
+      }
+
+      .ok {
+        color: #1f6f43;
+        font-weight: 700;
+      }
+
+      .fail {
+        color: var(--signal);
+        font-weight: 700;
+      }
+
+      section {
+        padding: 74px 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: minmax(0, 0.8fr) minmax(280px, 0.55fr);
+        gap: 40px;
+        align-items: end;
+        margin-bottom: 32px;
+      }
+
+      .section-head p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 22px;
+      }
+
+      .panel p,
+      .panel li {
+        color: var(--muted);
+      }
+
+      pre {
+        margin: 0;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--code);
+        padding: 18px;
+        color: #25231e;
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      code {
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      }
+
+      .wide {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .api-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .api-row {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 18px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .api-row code {
+        color: var(--trace);
+        font-weight: 700;
+      }
+
+      .api-row p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .proof {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .proof strong {
+        display: block;
+        font-size: 24px;
+      }
+
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 32px 0;
+        color: var(--muted);
+      }
+
+      @media (max-width: 860px) {
+        .hero,
+        .section-head,
+        .wide {
+          grid-template-columns: 1fr;
+        }
+
+        h1 {
+          font-size: clamp(44px, 13vw, 64px);
+        }
+
+        .lead {
+          font-size: 18px;
+        }
+
+        .grid,
+        .proof {
+          grid-template-columns: 1fr;
+        }
+
+        .trace-line,
+        .api-row {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .shell {
+          padding: 0 20px;
+        }
+
+        nav {
+          align-items: flex-start;
+          padding: 10px 20px;
+        }
+
+        .brand {
+          max-width: 96px;
+          line-height: 1.2;
+        }
+
+        .navlinks {
+          justify-content: flex-end;
+          gap: 8px 14px;
+        }
+
+        h1 {
+          font-size: clamp(40px, 12vw, 52px);
+        }
+
+        .trace-card {
+          display: none;
+        }
+
+        pre {
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav class="shell" aria-label="Primary navigation">
+        <a class="brand" href="#">oh-my-workflow</a>
+        <div class="navlinks">
+          <a href="#quickstart">Quickstart</a>
+          <a href="#api">API</a>
+          <a href="#patterns">Patterns</a>
+          <a href="#deploy">Deploy</a>
+          <a href="https://github.com/domuk-k/oh-my-workflow">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <div class="shell hero">
+        <div>
+          <p class="eyebrow">Workflow mode for coding agents</p>
+          <h1>Give your coding agent a workflow mode.</h1>
+          <p class="lead">
+            Add <code>/omw</code>, describe a multi-step job, and let your agent write and run
+            the workflow. The runtime handles whole agent CLIs like <code>claude -p</code>,
+            <code>codex exec</code>, and <code>hermes</code> with bounded concurrency, schema
+            gates, automatic repair, resume, and a JSONL journal.
+          </p>
+          <div class="actions">
+            <a class="button" href="#quickstart">Add /omw to your agent</a>
+            <a class="button secondary" href="https://github.com/domuk-k/oh-my-workflow">Read the source</a>
+          </div>
+        </div>
+
+        <aside class="trace-card" aria-label="Example workflow trace">
+          <div class="trace-head">
+            <span>.omw/r-demo.jsonl</span>
+            <span>6 ok / 1 failed</span>
+          </div>
+          <div class="trace-body">
+            <div class="trace-line"><span>Scope</span><span>call#1</span><span class="ok">ok</span></div>
+            <div class="trace-line"><span>Search</span><span>search:a repaired schema</span><span class="ok">ok</span></div>
+            <div class="trace-line"><span>Search</span><span>search:b timed out</span><span class="fail">null</span></div>
+            <div class="trace-line"><span>Verify</span><span>pipeline survivors</span><span class="ok">ok</span></div>
+            <div class="trace-line"><span>Synth</span><span>single result JSON</span><span class="ok">ok</span></div>
+          </div>
+        </aside>
+      </div>
+
+      <section id="quickstart">
+        <div class="shell wide">
+          <div>
+            <p class="eyebrow">Quickstart</p>
+            <h2>Add one command to your coding agent.</h2>
+            <p class="lead">
+              Install the authoring skill, then ask your own agent to create and run a workflow.
+              omw defaults to <code>--agent auto</code>, so the skill can call the CLI without making
+              you pick Claude, Codex, or Hermes.
+            </p>
+          </div>
+          <pre><code>npx skills add domuk-k/oh-my-workflow --skill omw
+
+/omw review this repo, fan out three bug-finding passes,
+verify the strongest claims, and return the fixes with evidence.</code></pre>
+        </div>
+      </section>
+
+      <section>
+        <div class="shell">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Why now</p>
+              <h2>Agent CLIs made workflow glue the bottleneck.</h2>
+            </div>
+            <p>
+              Coding agents are no longer only chat panes. They are CLIs you can launch, resume, bound,
+              and compose. Most teams still rebuild the same orchestration shell each time.
+            </p>
+          </div>
+          <div class="grid">
+            <article class="panel">
+              <h3>Closed workflow surfaces proved the pattern</h3>
+              <p>Native dynamic workflows are useful. omw makes the authoring shape portable across hosts.</p>
+            </article>
+            <article class="panel">
+              <h3>Schema gates turn prose into contracts</h3>
+              <p>Each node can self-repair against JSON Schema errors before your script sees the result.</p>
+            </article>
+            <article class="panel">
+              <h3>Journals make agent work debuggable</h3>
+              <p>Every phase, attempt, failure kind, cached hit, and final result is replayable as JSONL.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="api">
+        <div class="shell wide">
+          <div>
+            <p class="eyebrow">API</p>
+            <h2>The whole runtime is seven hooks.</h2>
+            <p class="lead">No DSL, no source transform, no ambient globals. Destructure only what you use.</p>
+          </div>
+          <div class="api-list panel">
+            <div class="api-row"><code>agent</code><p>Run one coding-agent CLI node. Returns validated output, raw text, or null.</p></div>
+            <div class="api-row"><code>parallel</code><p>Run independent thunks concurrently and keep failures as null.</p></div>
+            <div class="api-row"><code>pipeline</code><p>Move each item through stages independently without stage-wide barriers.</p></div>
+            <div class="api-row"><code>workflow</code><p>Run one nested workflow, sharing adapter, journal, and budget pool.</p></div>
+            <div class="api-row"><code>budget</code><p>Read total, spent, and remaining output-token budget.</p></div>
+            <div class="api-row"><code>phase</code><p>Group later calls under a journal and pretty-tree heading.</p></div>
+            <div class="api-row"><code>log</code><p>Write narration into the side-channel journal, never stdout.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="patterns">
+        <div class="shell">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Patterns</p>
+              <h2>Use it when the graph matters.</h2>
+            </div>
+            <p>omw is for multi-step agent work: search, verify, vote, synthesize, loop, resume.</p>
+          </div>
+          <div class="grid">
+            <article class="panel">
+              <h3>Fan-out</h3>
+              <p>Launch N research or review nodes with bounded concurrency, then dedupe and rank survivors.</p>
+            </article>
+            <article class="panel">
+              <h3>Verify-vote</h3>
+              <p>Have independent agents judge a finding. Failed nodes abstain instead of voting no.</p>
+            </article>
+            <article class="panel">
+              <h3>Loop-until-dry</h3>
+              <p>Keep asking for one more issue until a round returns no new validated result.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="deploy">
+        <div class="shell wide">
+          <div>
+            <p class="eyebrow">Launch proof</p>
+            <h2>Small enough to audit, tested enough to trust.</h2>
+            <p class="lead">
+              The repo ships a conformance suite, live adapter smoke tests behind <code>OMW_LIVE=1</code>,
+              Vercel static docs configuration, and a Show HN launch note in <code>docs/launch/</code>.
+            </p>
+          </div>
+          <div class="proof">
+            <div class="panel"><strong>212</strong><span>unit and conformance tests</span></div>
+            <div class="panel"><strong>1</strong><span>runtime dependency: ajv</span></div>
+            <div class="panel"><strong>1</strong><span>result JSON on stdout</span></div>
+            <div class="panel"><strong>30s</strong><span>free demo path</span></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="shell">
+        <span>MIT licensed. Built for people composing real coding-agent CLIs.</span>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -166,7 +166,7 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
     followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
       const args = ["-p", prompt, "--resume", sessionId, "--output-format", "json"];
       if (!opts?.inheritMcp) args.push("--strict-mcp-config");
-      return run(args, opts?.cwd);
+      return run(args, opts?.cwd, opts?.timeoutMs);
     },
   };
 }

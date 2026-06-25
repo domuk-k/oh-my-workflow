@@ -1,5 +1,5 @@
 ---
-name: oh-my-workflow
+name: omw
 description: Use when a task decomposes into multiple coding-agent CLI calls (claude -p / codex exec) that should run as one structured, schema-gated, journaled workflow — fan-out search, verify-vote, pipeline, or loop-until-dry. Teaches you to author a plain-JS omw script, run it with `omw run`, read the JSONL journal, and repair your own script from structured failures.
 ---
 
@@ -45,11 +45,12 @@ omw is on npm, so you can run the whole thing in one line — no install step, n
 key, no cost:
 
 ```sh
-bunx oh-my-workflow@latest run examples/deep-research --agent fake
+bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake
 # → {"confirmed":[…],"summary":{…}}    exit 0 · no key · no cost · deterministic
 ```
 
-> Tip: use `@latest`. A bare `bunx oh-my-workflow` can serve a stale cached copy.
+> Tip: the GitHub source keeps the skill and runtime aligned before a new npm
+> release lands.
 
 That single command runs the **whole spine** for you — a fan-out search, a
 pipeline, a scripted schema-fail→self-repair, and a scripted timeout→drop — and
@@ -57,16 +58,16 @@ prints one result JSON. Want to watch it happen? Add `--pretty` for the
 phase/fan-out tree on stderr:
 
 ```sh
-bunx oh-my-workflow@latest run examples/deep-research --agent fake --pretty
+bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake --pretty
 ```
 
 `--agent fake` is a built-in, deterministic adapter — it's the no-key demo engine
-and the test double. When you're ready for real work, log into your agent CLI once
-and swap `--agent fake` → `--agent claude` (or `--agent codex`). Same script, real
-nodes.
+and the test double. For real work, write the workflow and run `omw run <file>`;
+the CLI defaults to `--agent auto`, choosing the current/installed coding-agent
+CLI. Set `OMW_AGENT=claude|codex|hermes` only when you need to pin it.
 
 > **Reading this as a skill?** You already have it. To install/update it for a
-> coding agent: `bunx oh-my-workflow@latest skill install` (→ `~/.claude/skills/`;
+> coding agent: `bunx github:domuk-k/oh-my-workflow skill install` (→ `~/.claude/skills/`;
 > `--codex` → `~/.codex/skills/`; `--opencode` → `~/.config/opencode/skills/`;
 > `--project` for one repo). `omw skill path` prints the bundled copy for other
 > hosts. Re-run `skill install` anytime to refresh.
@@ -360,7 +361,7 @@ while (budget.total && budget.remaining() > 50_000) {
 ## The run → journal → fix loop (this is the UX)
 
 ```sh
-bun src/cli/omw.ts run my-workflow.ts --agent claude --args '{"q":"…"}'
+bunx github:domuk-k/oh-my-workflow run my-workflow.ts --args '{"q":"…"}' --pretty
 ```
 
 - **stdout** = the result JSON, one blob. Pipe it, parse it.
@@ -518,7 +519,8 @@ agents that expose such a CLI can be nodes.
   no headless prompt→result interface — so it can't be an omw node.
 
 Missing CLI → exit 3 with `install_hint`. Run `--agent fake` any time for the
-free path.
+free path. `--agent auto` is the default: it honors `OMW_AGENT`, then host
+environment hints, then installed CLIs (`claude`, `codex`, `hermes`).
 
 ---
 
@@ -589,7 +591,7 @@ but cross-CLI routing is future work). Don't write scripts that assume these.
 
 - Module: `export default async ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result` · optional `export const meta` / `export const fake`. (Legacy `(rt, args)` still runs; `omw codemod <file>` migrates it.)
 - Path resolves a directory to `workflow.ts` / `workflow.js` / `index.ts` / `index.js`.
-- `omw run <wf> --agent <fake|claude|codex|pi> [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]`
+- `omw run <wf> [--agent <auto|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]`
 - `omw replay <journal.jsonl> [--json]`
 - `omw validate <wf> [--json]` — pre-flight: load + fake-fixture lint, no agents spawned.
 - `omw codemod <file> [--to-di] [--write]` — migrate a legacy `(rt, args)` workflow to destructured DI.

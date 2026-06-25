@@ -1,8 +1,9 @@
-// `omw run <wf> --agent <a> [--args JSON] [--concurrency N] [--pretty]`.
+// `omw run <wf> [--agent <a>] [--args JSON] [--concurrency N] [--pretty]`.
 // Parsing is a pure function so the input contract is testable without touching
 // the filesystem, a clock, or a subprocess.
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentPort } from "../adapters/types";
@@ -96,9 +97,8 @@ export function parseRunArgs(argv: string[]): ParseResult {
   }
 
   if (wfPath === undefined) return { ok: false, error: "missing workflow path" };
-  if (agent === undefined) return { ok: false, error: "missing --agent <name>" };
 
-  return { ok: true, value: { wfPath, agent, args, concurrency, pretty, resume, budget, strict } };
+  return { ok: true, value: { wfPath, agent: agent ?? "auto", args, concurrency, pretty, resume, budget, strict } };
 }
 
 // ── workflow execution ──────────────────────────────────────────────────────
@@ -384,13 +384,66 @@ const INSTALL_HINTS: Record<string, string> = {
 
 /** PATH probe — injected so the missing→installed branch is testable. */
 const defaultBinExists = (bin: string): boolean => Bun.which(bin) != null;
+const AUTO_ADAPTERS = ["claude", "codex", "hermes"] as const;
+
+function unique<T>(items: T[]): T[] {
+  return [...new Set(items)];
+}
+
+function autoCandidates(env: Record<string, string | undefined>): string[] {
+  const explicit = env.OMW_AGENT?.trim().toLowerCase();
+  if (explicit && explicit !== "auto") return [explicit];
+
+  const keys = new Set(Object.keys(env).map((k) => k.toUpperCase()));
+  const hostHints: string[] = [];
+  if (keys.has("CLAUDECODE") || keys.has("CLAUDE_CODE") || keys.has("CLAUDE_CODE_ENTRYPOINT")) {
+    hostHints.push("claude");
+  }
+  if (keys.has("CODEX_SANDBOX") || keys.has("CODEX_CLI") || keys.has("OPENAI_CODEX")) {
+    hostHints.push("codex");
+  }
+  if (keys.has("HERMES") || keys.has("HERMES_CLI")) {
+    hostHints.push("hermes");
+  }
+
+  return unique([...hostHints, ...AUTO_ADAPTERS]);
+}
+
+function makeNamedAdapter(name: string, wf: LoadedWorkflow): AgentPort | undefined {
+  if (name === "fake") return makeFakeAdapter(wf.fake);
+  if (name === "claude") return makeClaudeAdapter();
+  if (name === "codex") return makeCodexAdapter();
+  if (name === "hermes") return makeHermesAdapter();
+  return undefined;
+}
 
 export function resolveAdapter(
   name: string,
   wf: LoadedWorkflow,
   binExists: (bin: string) => boolean = defaultBinExists,
+  env: Record<string, string | undefined> = process.env,
 ): AdapterResolution {
   if (name === "fake") return { adapter: makeFakeAdapter(wf.fake) };
+  if (name === "auto") {
+    const candidates = autoCandidates(env);
+    for (const candidate of candidates) {
+      const adapter = makeNamedAdapter(candidate, wf);
+      if (candidate === "fake" && adapter) return { adapter };
+      if (adapter && binExists(candidate)) return { adapter };
+    }
+    const explicit = env.OMW_AGENT?.trim().toLowerCase();
+    if (explicit && explicit !== "auto") {
+      return {
+        missing: explicit,
+        installHint: INSTALL_HINTS[explicit] ?? `unknown adapter "${explicit}". Set OMW_AGENT to claude, codex, or hermes.`,
+      };
+    }
+    return {
+      missing: "auto",
+      installHint:
+        "could not auto-detect an installed coding-agent CLI. Install claude/codex/hermes, set OMW_AGENT=claude|codex|hermes, or pass --agent fake for the no-key demo.",
+    };
+  }
   if (name === "claude") {
     // A real adapter exists, but exit 3 (adapter_missing) if the CLI isn't on
     // PATH — tell the user what to install rather than failing mid-run.
@@ -422,7 +475,7 @@ export type Io = {
   runId?: () => string;
 };
 
-const defaultRunId = (): string => "r-" + Date.now().toString(36);
+const defaultRunId = (): string => `r-${Date.now().toString(36)}-${process.pid.toString(36)}-${randomUUID().slice(0, 8)}`;
 
 /** Wire real fs/import deps and run. Returns the exit code; writes the result
  *  JSON to stdout, the journal to <omwDir>/<runId>.jsonl, and any error JSON to
@@ -432,7 +485,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   if (!parsed.ok) {
     io.stderr(JSON.stringify({ error: "usage", message: parsed.error }));
     io.stderr(
-      "\nusage: omw run <workflow> --agent <fake|claude|codex|hermes|pi> [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]",
+      "\nusage: omw run <workflow> [--agent <auto|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]",
     );
     return 2;
   }

@@ -52,16 +52,17 @@ describe("parseSkillArgs", () => {
 });
 
 describe("skillCommand install", () => {
-  test("installs into ~/.claude/skills/oh-my-workflow and reports 'installed', then 'updated' (idempotent)", async () => {
+  test("installs into ~/.claude/skills/omw and reports 'installed', then 'updated' (idempotent)", async () => {
     const home = tmp("omw-home-");
     const skillDir = srcDir("BODY-V1");
-    const dest = join(home, ".claude", "skills", "oh-my-workflow", "SKILL.md");
+    const dest = join(home, ".claude", "skills", "omw", "SKILL.md");
 
     const a = mkIo({ homeDir: home, skillDir });
     expect(await skillCommand(["install"], a.io)).toBe(0);
     expect(existsSync(dest)).toBe(true);
     expect(readFileSync(dest, "utf8")).toBe("BODY-V1");
     expect(a.out()).toContain("installed");
+    expect(a.out()).toContain("/omw <your task>");
     expect(a.out()).not.toContain("updated");
 
     // re-run is idempotent and refreshes content
@@ -77,14 +78,14 @@ describe("skillCommand install", () => {
     const skillDir = srcDir("BODY");
     writeFileSync(join(skillDir, "extra.md"), "OLD RESOURCE");
     expect(await skillCommand(["install"], mkIo({ homeDir: home, skillDir }).io)).toBe(0);
-    const destExtra = join(home, ".claude", "skills", "oh-my-workflow", "extra.md");
+    const destExtra = join(home, ".claude", "skills", "omw", "extra.md");
     expect(existsSync(destExtra)).toBe(true);
 
     // drop the resource from the source, re-install → stale copy must be gone
     rmSync(join(skillDir, "extra.md"));
     expect(await skillCommand(["install"], mkIo({ homeDir: home, skillDir }).io)).toBe(0);
     expect(existsSync(destExtra)).toBe(false);
-    expect(existsSync(join(home, ".claude", "skills", "oh-my-workflow", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(home, ".claude", "skills", "omw", "SKILL.md"))).toBe(true);
   });
 
   test("--project installs into ./.claude/skills, not home", async () => {
@@ -92,7 +93,7 @@ describe("skillCommand install", () => {
     const cwd = tmp("omw-proj-");
     const skillDir = srcDir();
     expect(await skillCommand(["install", "--project"], mkIo({ homeDir: home, cwd, skillDir }).io)).toBe(0);
-    expect(existsSync(join(cwd, ".claude", "skills", "oh-my-workflow", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(cwd, ".claude", "skills", "omw", "SKILL.md"))).toBe(true);
     expect(existsSync(join(home, ".claude"))).toBe(false);
   });
 
@@ -103,9 +104,9 @@ describe("skillCommand install", () => {
     expect(await skillCommand(["install", "--codex"], mkIo({ homeDir: home, skillDir }).io)).toBe(0);
     expect(await skillCommand(["install", "--opencode"], mkIo({ homeDir: home, skillDir }).io)).toBe(0);
 
-    expect(existsSync(join(home, ".claude", "skills", "oh-my-workflow", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(home, ".codex", "skills", "oh-my-workflow", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(home, ".config", "opencode", "skills", "oh-my-workflow", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(home, ".claude", "skills", "omw", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(home, ".codex", "skills", "omw", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(home, ".config", "opencode", "skills", "omw", "SKILL.md"))).toBe(true);
   });
 
   test("path prints the bundled SKILL.md location", async () => {

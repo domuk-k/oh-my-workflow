@@ -55,8 +55,8 @@ export type InvokeRequest = {
 };
 
 /** The subset of InvokeRequest a resume turn must mirror from its original
- *  invoke so the repair runs in the same environment (same cwd, same MCP). */
-export type FollowUpOpts = Pick<InvokeRequest, "cwd" | "inheritMcp">;
+ *  invoke so the repair runs in the same environment and obeys the same bounds. */
+export type FollowUpOpts = Pick<InvokeRequest, "cwd" | "inheritMcp" | "timeoutMs">;
 
 export type AgentPort = {
   name: string;
@@ -66,6 +66,8 @@ export type AgentPort = {
    *  `opts.cwd` MUST match the original invoke: claude scopes conversation history
    *  by project directory, so resuming from a different cwd fails to find the
    *  session ("No conversation found"). `opts.inheritMcp` must mirror the
-   *  original invoke so the resume turn sees the same MCP environment. */
+   *  original invoke so the resume turn sees the same MCP environment.
+   *  `opts.timeoutMs` must mirror the original invoke so a schema-repair resume
+   *  turn cannot hang longer than the node it is repairing. */
   followUp?(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult>;
 };

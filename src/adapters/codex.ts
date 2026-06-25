@@ -145,7 +145,7 @@ export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
     // (MCP isolation / inheritMcp is not yet implemented for codex.)
     followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
       const args = ["exec", "resume", sessionId, "--json", "-s", sandbox, prompt];
-      return run(args, opts?.cwd);
+      return run(args, opts?.cwd, opts?.timeoutMs);
     },
   };
 }

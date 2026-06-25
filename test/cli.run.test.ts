@@ -53,6 +53,38 @@ describe("resolveAdapter", () => {
     const r = resolveAdapter("nope", { workflow: async () => ({}) }, () => false);
     expect("missing" in r && r.missing).toBe("nope");
   });
+
+  test("auto uses OMW_AGENT when it is set", () => {
+    const r = resolveAdapter("auto", { workflow: async () => ({}) }, (bin) => bin === "codex", { OMW_AGENT: "codex" });
+    expect("adapter" in r && r.adapter.name).toBe("codex");
+  });
+
+  test("auto allows OMW_AGENT=fake for deterministic demos", () => {
+    const r = resolveAdapter("auto", { workflow: async () => ({}) }, () => false, { OMW_AGENT: "fake" });
+    expect("adapter" in r && r.adapter.name).toBe("fake");
+  });
+
+  test("auto prefers host hints before installed fallback order", () => {
+    const r = resolveAdapter(
+      "auto",
+      { workflow: async () => ({}) },
+      (bin) => bin === "claude" || bin === "codex",
+      { CODEX_SANDBOX: "workspace-write" },
+    );
+    expect("adapter" in r && r.adapter.name).toBe("codex");
+  });
+
+  test("auto falls back to the first installed supported CLI", () => {
+    const r = resolveAdapter("auto", { workflow: async () => ({}) }, (bin) => bin === "claude", {});
+    expect("adapter" in r && r.adapter.name).toBe("claude");
+  });
+
+  test("auto is adapter_missing when no supported CLI is installed", () => {
+    const r = resolveAdapter("auto", { workflow: async () => ({}) }, () => false, {});
+    expect("missing" in r && r.missing).toBe("auto");
+    if (!("missing" in r)) throw new Error("expected missing");
+    expect(r.installHint).toContain("OMW_AGENT");
+  });
 });
 
 describe("parseRunArgs", () => {
@@ -77,6 +109,13 @@ describe("parseRunArgs", () => {
       pretty: true,
       strict: false,
     });
+  });
+
+  test("defaults --agent to auto so skills can call omw run directly", () => {
+    const r = parseRunArgs([".omw/workflows/review.ts"]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.value.agent).toBe("auto");
   });
 
   test("parses --budget (positive int) and --strict (boolean)", () => {
@@ -622,6 +661,27 @@ describe("runCommand — resume input guards", () => {
     );
     expect(code).toBe(1);
     expect(errs.join("")).toContain("resume_read_failed");
+  });
+
+  test("default run ids do not collide across immediate consecutive runs", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omw-runid-"));
+    const journals: string[] = [];
+    const io = {
+      stdout: () => {},
+      stderr: (s: string) => {
+        const m = s.match(/journal: (.+\.jsonl)/);
+        if (m) journals.push(m[1]!);
+      },
+      omwDir: join(dir, ".omw"),
+    };
+
+    const a = await runCommand(["examples/deep-research", "--agent", "fake"], io);
+    const b = await runCommand(["examples/deep-research", "--agent", "fake"], io);
+
+    expect(a).toBe(0);
+    expect(b).toBe(0);
+    expect(journals.length).toBe(2);
+    expect(new Set(journals).size).toBe(2);
   });
 });
 

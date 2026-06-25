@@ -8,6 +8,16 @@ All notable changes to this project are documented here. This project adheres to
 Re-surfaces omw as the **open twin of Claude Code's native dynamic Workflow** —
 same authoring shape and vocabulary, external coding-agent CLI nodes, no magic.
 
+### Launch readiness
+
+- Added a Vercel-ready static docs site (`docs/site`, built with `bun run docs:build`)
+  that leads with `/omw` skill onboarding, why the timing matters, the seven-hook
+  API, core patterns, and verification proof.
+- Added a Show HN / GeekNews launch note at `docs/launch/show-hn.md`.
+- CI now builds the docs site in addition to typecheck and tests.
+- `omw run <workflow>` now defaults to `--agent auto`, so an installed skill can
+  run the workflow without asking the user to pick Claude, Codex, or Hermes.
+
 ### Changed (breaking — authoring surface)
 
 - **Workflows now take the hooks as a destructured first argument**:
@@ -49,6 +59,10 @@ same authoring shape and vocabulary, external coding-agent CLI nodes, no magic.
   strict runs share one install, and a global frozen mid-run can't strand the other.
 - The legacy-authoring deprecation notice is now actually surfaced to stderr, and a
   *named* destructured function (`function name({ … })`) is no longer misflagged as legacy.
+- Schema-gate in-session `followUp` repair turns now inherit the original node's
+  `timeoutMs`, so a repair cannot hang longer than the node it is repairing.
+- Default run ids now include process and random entropy, preventing two immediate
+  runs from appending into the same `.omw/<run>.jsonl` file.
 
 ## [0.3.0]
 

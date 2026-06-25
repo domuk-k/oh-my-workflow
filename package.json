@@ -12,6 +12,11 @@
     "examples",
     "conformance",
     "skill",
+    "scripts/build-docs.ts",
+    "scripts/check-docs.ts",
+    "docs/site",
+    "docs/launch",
+    "vercel.json",
     "README.md",
     "LICENSE"
   ],
@@ -33,7 +38,9 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run typecheck && bun test"
+    "docs:build": "bun scripts/build-docs.ts",
+    "docs:check": "bun scripts/check-docs.ts",
+    "prepublishOnly": "bun run typecheck && bun test && bun run docs:build && bun run docs:check"
   },
   "keywords": [
     "workflow",

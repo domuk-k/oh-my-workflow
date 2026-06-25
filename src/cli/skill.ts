@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 /** Package root, so the bundled skill resolves whether omw runs from a clone or
  *  an npm install invoked from any cwd. (Same technique as run.ts's PKG_ROOT.) */
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SKILL_NAME = "oh-my-workflow";
+const SKILL_NAME = "omw";
 
 export type SkillIo = {
   stdout: (s: string) => void;
@@ -40,7 +40,7 @@ const USAGE =
   "commands:\n" +
   "  install [--project] [--codex|--opencode]\n" +
   "                        copy the skill into a coding agent's skills dir so it's picked up\n" +
-  "                        (default agent: claude → ~/.claude/skills/oh-my-workflow;\n" +
+  "                        (default agent: claude → ~/.claude/skills/omw;\n" +
   "                         --codex → ~/.codex/skills/…; --opencode → ~/.config/opencode/skills/…;\n" +
   "                         --project targets the cwd instead of home)\n" +
   "  path                  print the bundled SKILL.md path (for cat / piping / pointing an agent at it)\n";
@@ -120,7 +120,7 @@ export async function skillCommand(argv: string[], io: SkillIo): Promise<number>
   io.stdout(
     `${updating ? "updated" : "installed"} ${SKILL_NAME} skill → ${dest}\n` +
       `${parsed.project ? "This project's" : discovers} agent auto-discovers skills here.\n` +
-      `Next: ask your coding agent to "use oh-my-workflow to <your task>".\n`,
+      `Next: ask your coding agent with "/omw <your task>".\n`,
   );
   return 0;
 }

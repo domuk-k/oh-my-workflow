@@ -1,66 +1,52 @@
 # oh-my-workflow
 
-> **The open dynamic-workflow runtime** — the portable twin of Claude Code's
-> native dynamic Workflow. You write a plain-JS orchestration script; its nodes
-> are whole coding-agent CLIs (`claude -p`, `codex exec`). omw is the thin glue:
-> it runs the script, schema-gates each node's output, journals every step so the
-> authoring agent can read its own failure and repair its own script — and gives
-> you the same vocabulary as the native tool (`agent` / `parallel` / `pipeline` /
-> `workflow` / `budget`), with **no magic** (no source transform, no ambient
-> globals, no sandbox-by-default). What's "deterministic" is scoped honestly below.
+> **Workflow mode for coding agents** — add `/omw`, describe a multi-step job,
+> and let your agent write and run the workflow. Under the hood it is the open,
+> portable twin of Claude Code's native dynamic Workflow: a plain-JS script whose
+> nodes are whole coding-agent CLIs (`claude -p`, `codex exec`). omw is the thin
+> glue: schema gates, bounded concurrency, repair, resume, and a JSONL journal
+> your authoring agent can read to fix its own script.
 
-## Try it now — free, no API key
+## Quickstart — add `/omw` to your coding agent
 
 ```sh
-git clone https://github.com/domuk-k/oh-my-workflow && cd oh-my-workflow
-bun install
-bun src/cli/omw.ts run examples/deep-research --agent fake
+npx skills add domuk-k/oh-my-workflow --skill omw
 ```
 
-```json
-{"confirmed":[{"topic":"a","hits":3,"verified":true},{"topic":"c","hits":5,"verified":true}],"summary":{"summary":"done","count":2}}
+Then ask from Claude Code, Codex, opencode, or any agent that reads skills:
+
+```text
+/omw write a workflow that reviews this repo, fans out three implementation plans,
+verifies them independently, and returns the best one with evidence.
 ```
 
-That's the whole spine in one pass — a `--pretty` tree shows it:
+That is the intended onboarding: install one skill, then ask your own coding
+agent to author and run the workflow. The skill teaches it to create a plain-JS
+workflow file, run `omw run`, read `.omw/<run>.jsonl`, and repair the script from
+structured failures.
+
+Today the same skill is bundled in the package:
 
 ```sh
-bun src/cli/omw.ts run examples/deep-research --agent fake --pretty
+bunx github:domuk-k/oh-my-workflow skill install          # Claude Code
+bunx github:domuk-k/oh-my-workflow skill install --codex  # Codex
+bunx github:domuk-k/oh-my-workflow skill install --opencode
 ```
 
-```
-run r-… (examples/deep-research)
-  ▸ Scope
-    • call#1 [fake]
-      ✓ call#1
-  ▸ Search
-    • search:a [fake]
-    • search:b [fake]
-    • search:c [fake]
-      ✗ timeout call#3
-      ✓ call#4
-      ✓ call#2
-  ▸ Verify
-    • call#5 [fake]
-    • call#6 [fake]
-      ✓ call#5
-      ✓ call#6
-  ▸ Synthesize
-    • call#7 [fake]
-      ✓ call#7
-run_end ok=true · 6 ok / 1 failed
+Prefer `npx skills add domuk-k/oh-my-workflow --skill omw` for the shared skills
+CLI; use `bunx github:domuk-k/oh-my-workflow skill install` when you want the
+bundled copy directly from the repo.
+
+## Try the runtime without a live agent
+
+```sh
+bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake --pretty
 ```
 
-`search:a` (call#2) returns invalid JSON first and self-repairs to `✓`; `search:b`
-(call#3) times out and is dropped by `filter(Boolean)` — the run still ends green.
-
-`--agent fake` is a built-in deterministic adapter — no API key, no network. A
-stranger runs the full fan-out + pipeline + a scripted schema-fail→self-repair +
-a scripted timeout→drop, and gets a stable result JSON. Swap `--agent claude`
-(after `claude login`) to run it for real.
-
-> Once on npm this is `bunx oh-my-workflow run examples/deep-research --agent fake`
-> — the example ships inside the package and resolves from there, so it runs from
-> any directory. omw runs under **bun**; `npx` (Node) won't execute the TS bin.
+`--agent fake` is a built-in deterministic adapter: no API key, no network, no
+cost. It exercises the same spine the skill asks your agent to use for real work:
+fan-out, pipeline, schema-fail to self-repair, timeout to `null`, and one final
+result JSON.
 
 ## The twin framing
 
@@ -93,6 +79,20 @@ export default async function ({ agent, parallel }, args) {
 ```
 
 The script is nearly the same; what differs is what a node *is* and where it runs.
+
+## Why this matters now
+
+Coding agents have crossed from chat surfaces into everyday CLIs. Claude Code,
+Codex, opencode-style hosts, and smaller agent CLIs can all run meaningful work
+from a shell, but multi-agent jobs still need the same missing glue: fan-out,
+schema validation, retries, bounded concurrency, run journals, resume, and a
+single result for the caller.
+
+omw packages that glue without claiming to be a new agent framework. A node is a
+whole external coding-agent CLI. The workflow is plain JavaScript. The journal is
+JSONL you can inspect. That makes the pattern portable enough for a local script,
+a CI job, another coding agent, or a launch demo someone can try in 30 seconds
+with no key.
 
 ## What it is
 
@@ -162,19 +162,23 @@ context — there's nothing non-standard to carry along.
 ## Install the skill (the primary product)
 
 omw's primary product is an **agent-authoring skill** (`skill/SKILL.md`) — it
-teaches a coding agent to write, run, and repair omw workflows. After the package
-is installed, wire the skill into your agent in one step:
+teaches a coding agent to write, run, and repair omw workflows. The short path is:
 
 ```sh
-omw skill install              # → ~/.claude/skills/oh-my-workflow   (Claude Code)
-omw skill install --codex      # → ~/.codex/skills/oh-my-workflow
-omw skill install --opencode   # → ~/.config/opencode/skills/oh-my-workflow
-omw skill install --project    # → ./.claude/skills/oh-my-workflow   (this repo only)
-omw skill path                 # print the bundled SKILL.md path
+npx skills add domuk-k/oh-my-workflow --skill omw
 ```
 
-Then ask your coding agent: *"use oh-my-workflow to &lt;task&gt;"* — it authors a
-`workflow.ts` and runs it with `omw run`.
+For hosts that do not yet read that registry, install the bundled copy:
+
+```sh
+bunx github:domuk-k/oh-my-workflow skill install              # → ~/.claude/skills/omw
+bunx github:domuk-k/oh-my-workflow skill install --codex      # → ~/.codex/skills/omw
+bunx github:domuk-k/oh-my-workflow skill install --opencode   # → ~/.config/opencode/skills/omw
+bunx github:domuk-k/oh-my-workflow skill install --project    # → ./.claude/skills/omw
+```
+
+Then ask your coding agent with `/omw <task>`. It authors a workflow file, runs it
+with `omw run`, and uses the JSONL journal to repair failures.
 
 ## Adapters
 
@@ -182,6 +186,7 @@ A node is a coding agent driven through its headless prompt→result CLI.
 
 | adapter | status | notes |
 |---|---|---|
+| **auto** | default | honors `OMW_AGENT`, then host hints, then installed CLIs in order: `claude`, `codex`, `hermes` |
 | **fake** | built-in, free, deterministic | the no-key demo engine and test double |
 | **claude** | **full** (live-verified, 2.1.x) | `claude -p --output-format json --strict-mcp-config` (nodes isolated from host MCP by default; opt in per call with `inheritMcp`); `--resume` (same cwd) powers in-session schema self-repair. `effort`/`agentType` have no faithful CLI flag yet → dropped with a one-time warn (honest-scope) |
 | **codex** | **experimental** (live-verified, 0.137.x) | `codex exec --json`; **no cost field**; tolerates malformed JSONL ([openai/codex#15451](https://github.com/openai/codex/issues/15451)) and fails *actionably* |
@@ -256,10 +261,19 @@ adapter tests run only under `OMW_LIVE=1` (they spend real tokens).
 
 ## Docs
 
+- **Official docs site source**: [`docs/site/index.html`](docs/site/index.html)
+- Launch note: [`docs/launch/show-hn.md`](docs/launch/show-hn.md)
 - **Skill (primary product)**: [`skill/SKILL.md`](skill/SKILL.md)
 - Open-twin design: [`docs/specs/2026-06-23-omw-open-dynamic-workflow-twin-design.md`](https://github.com/domuk-k/oh-my-workflow/blob/main/docs/specs/2026-06-23-omw-open-dynamic-workflow-twin-design.md)
 - Product spec: [`docs/specs/2026-06-12-oh-my-workflow-design.md`](https://github.com/domuk-k/oh-my-workflow/blob/main/docs/specs/2026-06-12-oh-my-workflow-design.md)
 - Resume / determinism internals: [`docs/specs/2026-06-15-resume-internals-deepdive.md`](https://github.com/domuk-k/oh-my-workflow/blob/main/docs/specs/2026-06-15-resume-internals-deepdive.md)
+
+Deploy the docs with Vercel:
+
+```sh
+bun run docs:build
+bunx vercel deploy --prod
+```
 
 ## License
 

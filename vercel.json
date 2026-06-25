@@ -1,0 +1,5 @@
+{
+  "buildCommand": "bun run docs:build",
+  "outputDirectory": "dist/docs",
+  "installCommand": "bun install --frozen-lockfile"
+}

@@ -58,6 +58,7 @@ export type Runtime = {
   agent(prompt: string, opts?: AgentOpts): Promise<unknown | null>;
   pipeline(items: unknown[], ...stages: Stage[]): Promise<unknown[]>;
   parallel(thunks: Array<() => Promise<unknown>>): Promise<unknown[]>;
+  workflow(ref: string | { scriptPath: string }, args?: unknown): Promise<unknown>;
   phase(title: string): void;
   log(msg: string): void;
   /** Token budget view. `total` is the ceiling (null = unbounded); `spent()`
@@ -280,6 +281,7 @@ export function makeRuntime(deps: {
             r = await adapter.followUp(lastSessionId, retryPrompt(prompt, feedback, false), {
               cwd: effCwd,
               inheritMcp: opts.inheritMcp,
+              timeoutMs: opts.timeoutMs,
             });
             // Resume can fail even when the format hiccup was recoverable (e.g. a
             // killed/expired session). Don't let a broken resume be terminal —
@@ -376,6 +378,9 @@ export function makeRuntime(deps: {
     agent,
     parallel,
     pipeline,
+    workflow: async () => {
+      throw new Error("workflow() hook is only available through runWorkflow");
+    },
     phase: (title: string) => {
       currentPhase = title;
       journal.phase(title);

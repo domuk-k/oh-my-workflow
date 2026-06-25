@@ -116,6 +116,18 @@ describe("makeCodexAdapter (injected spawn)", () => {
     expect(calls[0]).toContain("thread-9");
   });
 
+  test("followUp forwards timeoutMs so schema repair cannot hang forever", async () => {
+    const opts: any[] = [];
+    const adapter = makeCodexAdapter({
+      spawn: async (_args, spawnOpts) => {
+        opts.push(spawnOpts);
+        return { code: 0, stdout: goldenJsonl, stderr: "" };
+      },
+    });
+    await adapter.followUp!("thread-9", "again", { timeoutMs: 777 });
+    expect(opts[0]?.timeoutMs).toBe(777);
+  });
+
   test("a spawn throw -> ok:false spawn_failure, never throws", async () => {
     const adapter = makeCodexAdapter({
       spawn: async () => {
