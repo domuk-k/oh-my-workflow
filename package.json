@@ -12,11 +12,6 @@
     "examples",
     "conformance",
     "skill",
-    "scripts/build-docs.ts",
-    "scripts/check-docs.ts",
-    "docs/site",
-    "docs/launch",
-    "vercel.json",
     "README.md",
     "LICENSE"
   ],
