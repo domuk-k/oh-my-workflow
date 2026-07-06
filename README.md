@@ -1,6 +1,7 @@
 # oh-my-workflow
 
 [![CI](https://github.com/domuk-k/oh-my-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/domuk-k/oh-my-workflow/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/oh-my-workflow.svg)](https://www.npmjs.com/package/oh-my-workflow)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun&logoColor=000)](https://bun.sh)
 
@@ -92,6 +93,8 @@ Every step lands in `.omw/<runId>.jsonl`. On failure, read `kind` (`timeout`, `s
 
 **Primary product:** [`skill/SKILL.md`](skill/SKILL.md) — teaches coding agents to author, run, and repair omw workflows.
 
+**Docs site:** [oh-my-workflow.vercel.app](https://oh-my-workflow.vercel.app) · **Roadmap:** [ROADMAP.md](ROADMAP.md)
+
 ---
 
 ## Install the skill
@@ -111,12 +114,13 @@ Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` 
 | Adapter | Status | Notes |
 |---------|--------|-------|
 | **fake** | Built-in | Deterministic demo + tests; no API key |
+| **in-session** | Host probe | `--agent in-session` or `--agent auto` when the host exposes a subagent callback; no CLI fallback |
 | **claude** | Full | `claude -p --output-format json`; schema repair via `--resume` |
 | **codex** | Experimental | `codex exec --json` |
 | **hermes** | Experimental | `hermes -z` one-shot |
 | **pi** | Planned | — |
 
-Missing CLI → exit `3` with `install_hint`. Pre-flight: `omw validate <wf>`.
+`--agent auto` picks in-session when a host callback exists, else the first installed CLI. Missing adapter → exit `3` with `install_hint`. Pre-flight: `omw validate <wf>`. Resume: `omw run <wf> --resume <runId>`; opt-in safety: `--strict-resume`.
 
 ---
 
@@ -150,6 +154,8 @@ Conformance suite under `conformance/` proves fan-out, pipeline, schema-gate, an
 ## Docs
 
 - [Skill (start here)](skill/SKILL.md)
+- [Roadmap](ROADMAP.md)
+- [Docs site](https://oh-my-workflow.vercel.app)
 - [Open-twin design](docs/specs/2026-06-23-omw-open-dynamic-workflow-twin-design.md)
 - [Product spec](docs/specs/2026-06-12-oh-my-workflow-design.md)
 
