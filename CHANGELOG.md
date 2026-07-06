@@ -3,6 +3,40 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] — in-session transport + strict resume
+
+Aligns npm with main: host-native subagent transport, safer resume, and public
+library exports for in-session runners.
+
+### Added
+
+- **`--agent in-session`** and **`probeInSessionHost()`** — detect a host callback
+  (Kiro subagent tool today) and run nodes in the live session; exit `3` with
+  `in_session_unavailable` when absent — **no CLI subprocess fallback**.
+- **`--agent auto`** now prefers in-session when probed, then host env hints, then
+  installed CLIs (`claude`, `codex`, `hermes`).
+- **`runInSessionWorkflow()`** — `oh-my-workflow/in-session` export for tiny host
+  runners (probe → runtime → workflow; same exit-code contract as `omw run`).
+- **`makeInSessionAdapter`** + **`makeKiroInSessionAdapter`** — in-session bridge
+  with `followUp` via host `sessionId` (schema-gate repair in the same session).
+- **`--strict-resume`** — on the first cache miss by call index, force every later
+  call live (prefix truncation for out-of-band state such as filesystem side-channels).
+- **Public package exports**: `oh-my-workflow/ambient`, `/in-session`,
+  `/adapters/in-session`, `/adapters/in-session-probe`, `/adapters/kiro-in-session`.
+
+### Changed
+
+- **`in-session` adapter** — richer host result extraction (`summary`, `Text`/`Json`,
+  nested shapes) and `sessionId` threading for follow-ups.
+- **SKILL.md** — adapter table, in-session flow, `--strict-resume`, and
+  `runInSessionWorkflow` documented to match CLI behavior.
+
+### Fixed
+
+- **`package.json` exports** merge conflict resolved — subpath imports work again.
+- **Codex adapter** — one-time warn when `inheritMcp` (and other unmapped opts) are
+  requested but not implemented (no silent no-op).
+
 ## [0.4.0] — open dynamic-workflow twin
 
 Re-surfaces omw as the **open twin of Claude Code's native dynamic Workflow** —
