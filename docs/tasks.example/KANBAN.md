@@ -34,7 +34,7 @@ _Last updated: YYYY-MM-DD_
 
 ### Phase 1 — discovery
 
-- [ ] Show HN / GeekNews (`docs/launch/show-hn.md`)
+- [ ] Show HN / GeekNews (`docs/launch/show-hn.md` — copy from `docs/launch.example/`)
 - [ ] Verify `npx skills add` install path
 - [ ] 90s asciinema: `deep-research --agent fake --pretty`
 - [ ] Example: verify-vote workflow

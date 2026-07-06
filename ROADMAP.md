@@ -68,7 +68,7 @@ Ship “this repo is maintained and safe to star.”
 
 Make the first impression spread.
 
-- [ ] **Show HN / GeekNews** — use `docs/launch/show-hn.md`; lead with fake demo + skill one-liner
+- [ ] **Show HN / GeekNews** — draft in gitignored `docs/launch/show-hn.md` (template: `docs/launch.example/`); lead with fake demo + skill one-liner
 - [ ] **skills.sh / npx skills add** — ensure skill slug and install path match README
 - [ ] **90s terminal recording** — `deep-research --agent fake --pretty` (asciinema or gif)
 - [ ] **Examples gallery** — 3 shipped workflows beyond deep-research:
@@ -133,6 +133,7 @@ Close the gaps people feel vs Claude Code **without** cloning the harness.
 
 - **Public roadmap (this file)** — phases, north star, what we won't do. Update when strategy shifts.
 - **Private kanban** — day-to-day cards live in `docs/tasks/KANBAN.md` (**gitignored**). Template: `docs/tasks.example/KANBAN.md` → `cp` to `docs/tasks/`.
+- **Launch drafts** — `docs/launch/` is gitignored (Show HN copy, GeekNews variants). Template: `docs/launch.example/`.
 - **Research scratch** — `docs/research/` is also gitignored; promote or discard before any publish.
 - Open Qs live in `docs/openq/` (tracked) until a phase commits to building.
 - Revisit phases after launch metrics (stars, npm weekly downloads, skill installs if measurable).

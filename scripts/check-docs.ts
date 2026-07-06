@@ -6,7 +6,7 @@ type Check = { name: string; ok: boolean; detail?: string };
 const root = process.cwd();
 const site = join(root, "dist", "docs", "index.html");
 const robots = join(root, "dist", "docs", "robots.txt");
-const launch = join(root, "docs", "launch", "show-hn.md");
+const launchExample = join(root, "docs", "launch.example", "show-hn.md");
 const skill = join(root, "skill", "SKILL.md");
 
 const checks: Check[] = [];
@@ -14,11 +14,11 @@ const add = (name: string, ok: boolean, detail?: string) => checks.push({ name, 
 
 add("docs build output exists", existsSync(site), site);
 add("robots.txt exists", existsSync(robots), robots);
-add("launch note exists", existsSync(launch), launch);
+add("launch note template exists", existsSync(launchExample), launchExample);
 add("skill exists", existsSync(skill), skill);
 
 const html = existsSync(site) ? readFileSync(site, "utf8") : "";
-const launchText = existsSync(launch) ? readFileSync(launch, "utf8") : "";
+const launchText = existsSync(launchExample) ? readFileSync(launchExample, "utf8") : "";
 const skillText = existsSync(skill) ? readFileSync(skill, "utf8") : "";
 
 for (const phrase of [
@@ -45,9 +45,9 @@ add("site has Twitter card", html.includes('name="twitter:card"'));
 add("site has favicon", html.includes('rel="icon"'));
 add("site has accessible nav label", html.includes('aria-label="Primary navigation"'));
 add("site has no placeholder words", !/\b(TODO|TBD|lorem|placeholder)\b/i.test(html + "\n" + launchText));
-add("launch note has title", /^Title:\n\n> Show HN:/m.test(launchText));
-add("launch note has skill install command", launchText.includes("npx skills add domuk-k/oh-my-workflow --skill omw"));
-add("launch note explains why now", launchText.includes("Why now:"));
+add("launch template has title", /^Title:\n\n> Show HN:/m.test(launchText));
+add("launch template has skill install command", launchText.includes("npx skills add domuk-k/oh-my-workflow --skill omw"));
+add("launch template explains why now", launchText.includes("Why now:"));
 add("skill frontmatter exposes /omw", /^name:\s*omw\s*$/m.test(skillText));
 add("skill teaches auto adapter", skillText.includes("--agent auto"));
 

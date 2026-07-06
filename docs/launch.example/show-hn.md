@@ -1,5 +1,11 @@
 # Show HN / GeekNews launch note
 
+> **Template.** Copy to `docs/launch/` (gitignored) and edit before posting.
+>
+> ```sh
+> mkdir -p docs/launch && cp docs/launch.example/show-hn.md docs/launch/
+> ```
+
 Title:
 
 > Show HN: oh-my-workflow - add /omw workflow mode to your coding agent
