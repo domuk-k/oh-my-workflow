@@ -36,4 +36,4 @@ Live adapter tests (`claude`, `codex`) run only with `OMW_LIVE=1` and the corres
 - **Nodes are whole agent CLIs**, not raw LLM API calls.
 - **Honest scope:** label experimental adapters; do not silently no-op options (warn once).
 
-See [ROADMAP.md](ROADMAP.md) for planned work.
+See [ROADMAP.md](ROADMAP.md) for planned work. Maintainers use a local gitignored kanban at `docs/tasks/KANBAN.md` (see `docs/tasks.example/`).

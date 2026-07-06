@@ -131,8 +131,10 @@ Close the gaps people feel vs Claude Code **without** cloning the harness.
 
 ## How to use this doc
 
-- Pick the **next unchecked box** in Phase 0 → ship small PRs.
-- Open Qs live in `docs/openq/` until a phase commits to building.
+- **Public roadmap (this file)** — phases, north star, what we won't do. Update when strategy shifts.
+- **Private kanban** — day-to-day cards live in `docs/tasks/KANBAN.md` (**gitignored**). Template: `docs/tasks.example/KANBAN.md` → `cp` to `docs/tasks/`.
+- **Research scratch** — `docs/research/` is also gitignored; promote or discard before any publish.
+- Open Qs live in `docs/openq/` (tracked) until a phase commits to building.
 - Revisit phases after launch metrics (stars, npm weekly downloads, skill installs if measurable).
 
-**Maintainer:** update this file when a phase completes or priorities shift.
+**Maintainer:** ROADMAP = strategy; KANBAN = sprint board.
