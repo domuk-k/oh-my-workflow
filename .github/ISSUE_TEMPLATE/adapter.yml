@@ -1,0 +1,54 @@
+name: Adapter request
+description: New coding-agent CLI or improve claude / codex / hermes / in-session
+title: "[adapter]: "
+labels: ["adapter"]
+body:
+  - type: markdown
+    value: |
+      omw nodes are **whole agent CLIs** (or in-session host callbacks), not raw LLM API calls.
+      Link to the CLI docs and how structured output / session resume works.
+
+  - type: input
+    id: cli
+    attributes:
+      label: CLI or host
+      placeholder: "e.g. codex exec, pi --print, Cursor subagent API"
+    validations:
+      required: true
+
+  - type: textarea
+    id: invoke
+    attributes:
+      label: How should a node be invoked?
+      description: Example command, JSON envelope, session/resume mechanism.
+    validations:
+      required: true
+
+  - type: textarea
+    id: structured
+    attributes:
+      label: Structured output path
+      description: Where does JSON live? How does schema-gate `followUp` resume in the same session?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Your use case
+      options:
+        - I need this for daily work
+        - Nice to have for parity / portfolio
+        - Experimental — happy to help implement
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: offer
+    attributes:
+      label: Contribution
+      options:
+        - label: I can open a PR with tests (injected spawn / fake double)
+          required: false
+        - label: I ran `OMW_LIVE=1` smoke and can share logs (redacted)
+          required: false

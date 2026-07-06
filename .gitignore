@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.omw/
+.agents/
+agent/skills/
+.claude/
+*.log
+.DS_Store
+.vercel
+
+# Maintainer-local (not published) — all of docs/ stays on disk only
+docs/

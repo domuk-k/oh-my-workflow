@@ -1,0 +1,94 @@
+{
+  "lang": "en",
+  "meta": {
+    "title": "oh-my-workflow — the open dynamic-workflow runtime",
+    "desc": "The portable twin of Claude Code's native dynamic Workflow. Plain-JS orchestration whose nodes are whole coding-agent CLIs."
+  },
+  "footer": "the open twin of dynamic Workflow",
+  "nav": {
+    "home": "Home",
+    "docs": "Docs",
+    "skill": "Skill",
+    "github": "GitHub",
+    "langLabel": "한국어"
+  },
+  "landing": {
+    "pill": "the open twin of Claude Code's dynamic Workflow",
+    "tagline": "Write a plain-JS orchestration script. Its nodes are whole coding-agent CLIs you already have — <code>claude -p</code>, <code>codex exec</code>, <code>hermes</code>. omw is the thin, readable glue.",
+    "ctaPrimary": "Quickstart — no API key",
+    "ctaSecondary": "View source",
+    "twinHeading": "Same shape as the native tool. Anywhere.",
+    "twinSub": "The script is nearly identical — what differs is what a node is and where it runs.",
+    "twinNativeLabel": "native dynamic Workflow — inside Claude Code",
+    "twinOpenLabel": "omw — anywhere, same shape",
+    "diffLegend": "<mark class=\"ins\">marked</mark> = the only two spots that change.",
+    "honestHeading": "Honest about the trade-off",
+    "honestNote": "✱ note",
+    "honestTitle": "This is slower and pricier than a raw-API orchestrator — on purpose.",
+    "honestBody": "A node is a whole coding agent, not one completion: it reads your repo, runs tools, iterates. You pay process + agent-loop overhead per node. The payoff: you orchestrate agents, not models — and Claude Code itself ships this exact pattern internally. omw is the portable twin, with the trade-offs named, not hidden.",
+    "adaptersHeading": "Bring your own agent",
+    "colAdapter": "adapter",
+    "colStatus": "status",
+    "colNotes": "notes",
+    "adapters": [
+      { "name": "fake", "status": "built-in", "kind": "full", "notes": "no-key deterministic demo + test double" },
+      { "name": "claude", "status": "full", "kind": "full", "notes": "JSON output + --resume powers in-session schema self-repair" },
+      { "name": "codex", "status": "experimental", "kind": "exp", "notes": "tolerates malformed JSONL, fails actionably" },
+      { "name": "hermes", "status": "experimental", "kind": "exp", "notes": "one-shot; schema retries go fresh" },
+      { "name": "pi", "status": "planned", "kind": "plan", "notes": "not wired yet" }
+    ]
+  },
+  "docs": {
+    "crumb": "Start / Introduction",
+    "title": "Introduction",
+    "intro": "oh-my-workflow (omw) is the open, portable twin of Claude Code's native dynamic Workflow. You write a plain-JS orchestration script whose nodes are whole coding-agent CLIs; omw runs the script, schema-gates each node's output, and journals every step.",
+    "quickstartHeading": "Quickstart",
+    "quickstartBody": "No API key, no network — the built-in fake adapter runs the whole spine:",
+    "hooksHeading": "The hooks",
+    "hookAgentBody": "Run one coding-agent CLI node. With a schema, omw validates and re-prompts the node with the errors up to 2×. Never throws (the null-contract) — except budget exhaustion.",
+    "hookFlowBody": "Per-item flow vs. barrier. Default to pipeline.",
+    "adaptersHeading": "Adapters",
+    "adaptersBody": "A node is a coding agent driven through its headless prompt→result CLI: fake, claude, codex, hermes, pi (planned). A missing CLI exits 3 with an install hint.",
+    "toc": "On this page",
+    "soon": "soon",
+    "sidebar": [
+      {
+        "group": "Start",
+        "items": [
+          { "label": "Introduction", "href": "#top", "active": true },
+          { "label": "Quickstart", "href": "#quickstart" },
+          { "label": "The twin framing" }
+        ]
+      },
+      {
+        "group": "Authoring",
+        "items": [
+          { "label": "Hooks: agent / parallel", "href": "#hooks" },
+          { "label": "pipeline vs parallel" },
+          { "label": "Schemas & self-repair" },
+          { "label": "budget & workflow()" }
+        ]
+      },
+      {
+        "group": "Runtime",
+        "items": [
+          { "label": "Adapters", "href": "#adapters" },
+          { "label": "Resume & determinism" },
+          { "label": "Exit codes" }
+        ]
+      },
+      {
+        "group": "Reference",
+        "items": [
+          { "label": "CLI: omw run" },
+          { "label": "omw skill install" }
+        ]
+      }
+    ],
+    "tocItems": [
+      { "label": "Quickstart", "href": "#quickstart" },
+      { "label": "The hooks", "href": "#hooks" },
+      { "label": "Adapters", "href": "#adapters" }
+    ]
+  }
+}

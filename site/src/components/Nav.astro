@@ -1,0 +1,20 @@
+---
+import { homeHref, docsHref, githubHref, skillHref, switchLangHref } from "../i18n/paths";
+import type { Lang } from "../i18n/paths";
+
+interface Props {
+  lang: Lang;
+  page: "home" | "docs";
+  t: any;
+}
+const { lang, page, t } = Astro.props;
+---
+
+<nav class="topnav">
+  <a class="brand" href={homeHref(lang)}>oh-my-workflow</a>
+  <a href={homeHref(lang)}>{t.nav.home}</a>
+  <a href={docsHref(lang)}>{t.nav.docs}</a>
+  <a href={skillHref()}>{t.nav.skill}</a>
+  <a href={githubHref()}>{t.nav.github}</a>
+  <a class="lang" href={switchLangHref(lang, page)}>{t.nav.langLabel}</a>
+</nav>

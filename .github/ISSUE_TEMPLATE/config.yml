@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions & questions
+    url: https://github.com/domuk-k/oh-my-workflow/discussions
+    about: Ask how to use omw or compare patterns before filing a bug.
+  - name: Security
+    url: https://github.com/domuk-k/oh-my-workflow/security/advisories/new
+    about: Report a security issue privately.

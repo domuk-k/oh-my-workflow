@@ -1,0 +1,59 @@
+name: Workflow pattern
+description: Share or request an example pattern (fan-out, verify-vote, loop-until-dry, …)
+title: "[pattern]: "
+labels: ["example"]
+body:
+  - type: markdown
+    value: |
+      Patterns live in `examples/` and are taught in `skill/SKILL.md`. Link to a similar built-in pattern if one exists.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Pattern type
+      options:
+        - fan-out
+        - verify-vote
+        - pipeline
+        - loop-until-dry
+        - budget-bounded loop
+        - nested workflow
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: sketch
+    attributes:
+      label: Workflow sketch
+      description: Pseudocode or a minimal `export default async function ({ agent, parallel }, args)` snippet.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: intent
+    attributes:
+      label: Intent
+      options:
+        - Request an official example in the repo
+        - Share a pattern that worked for me (blog / gist link OK)
+        - Ask if omw is the right tool for this
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: extras
+    attributes:
+      label: Extras
+      options:
+        - label: I included a `export const fake` fixture idea for deterministic tests
+          required: false
+        - label: I read "when not to use omw" in SKILL.md and this still fits
+          required: false
