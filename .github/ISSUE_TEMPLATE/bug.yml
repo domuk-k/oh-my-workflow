@@ -1,0 +1,63 @@
+name: Bug report
+description: Runtime, CLI, journal, or schema-gate behavior is wrong
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    value: |
+      Thanks for filing. Include enough to reproduce with `bun test` / `omw run … --agent fake` when possible.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: One sentence + expected vs actual.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Command, workflow snippet, adapter (`fake` / `claude` / `codex` / `in-session`), flags.
+      placeholder: |
+        bun src/cli/omw.ts run examples/deep-research --agent fake --pretty
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: omw version
+      placeholder: "0.4.1 (bunx oh-my-workflow --version or package.json)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options:
+        - Bun (local clone)
+        - bunx oh-my-workflow
+        - npm global / other
+    validations:
+      required: true
+
+  - type: textarea
+    id: journal
+    attributes:
+      label: Journal excerpt (optional)
+      description: Redact prompts if needed. Paste relevant `.omw/*.jsonl` lines or `agent_end` `kind`.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues
+          required: true
+        - label: I can reproduce with `--agent fake` or attached minimal workflow
+          required: false

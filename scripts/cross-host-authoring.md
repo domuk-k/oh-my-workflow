@@ -11,9 +11,9 @@ not the node runtime.
 ## 1. Install the skill into each host
 
 ```sh
-omw skill install              # Claude Code   → ~/.claude/skills/oh-my-workflow
-omw skill install --codex      # Codex         → ~/.codex/skills/oh-my-workflow
-omw skill install --opencode   # opencode      → ~/.config/opencode/skills/oh-my-workflow
+omw skill install              # Claude Code   → ~/.claude/skills/omw
+omw skill install --codex      # Codex         → ~/.codex/skills/omw
+omw skill install --opencode   # opencode      → ~/.config/opencode/skills/omw
 # Hermes: it has its own skills system — `hermes skills` — or point it at the file:
 omw skill path                 # prints the bundled SKILL.md to feed any host
 ```

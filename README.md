@@ -100,9 +100,10 @@ Every step lands in `.omw/<runId>.jsonl`. On failure, read `kind` (`timeout`, `s
 ## Install the skill
 
 ```sh
-omw skill install              # → ~/.claude/skills/oh-my-workflow
-omw skill install --codex      # → ~/.codex/skills/oh-my-workflow
-omw skill install --project    # → ./.claude/skills/oh-my-workflow
+omw skill install              # → ~/.claude/skills/omw
+omw skill install --codex      # → ~/.codex/skills/omw
+omw skill install --project    # → ./.claude/skills/omw
+# or: npx skills add domuk-k/oh-my-workflow --skill omw
 ```
 
 Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` and runs `omw run`.
