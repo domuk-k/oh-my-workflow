@@ -20,6 +20,52 @@ That is the right core for CI, in-session hosts, and coding agents that repair t
 
 A **Workflow Studio** (name TBD: Studio / Console / Portal) would be a **read-mostly + light-edit** surface on top of the existing contracts — not a second runtime.
 
+## Reference: Claude Code native dynamic Workflow UI/TUI
+
+Claude Code already ships a **simple but real** workflow UI on both **Desktop app** and **CLI** — not a full DAG editor, but enough to run, watch, approve, and drill into agents. omw should treat this as the **parity bar for human-facing surfaces**, while keeping JSONL as the richer machine-facing spine.
+
+Sources: [Claude Code workflows docs](https://code.claude.com/docs/en/workflows), `docs/research/2026-06-17-claude-code-internals-archaeology.md`, twin design spec §1.2 (`meta` → permission dialog + progress tree).
+
+### What native provides (surface by surface)
+
+| Native surface | What the user sees | omw today | Studio target |
+|----------------|-------------------|-----------|---------------|
+| **Launch approval** | CLI: planned phases + Yes / View raw script / No; Desktop: approval card with phase list + Once/Always/Deny | nothing (script is a file; `omw validate` is separate) | optional pre-run card from `export const meta` + phase list |
+| **Task panel strip** | One-line live progress under the input; ↓ to focus, Enter to expand | `--pretty` tree on **stderr** at end of run only | live tail of journal → same one-liner while running |
+| **`/workflows` TUI** | List running + completed runs; per-run progress view | `omw replay` (post-hoc, read-only) | Run list + interactive progress view |
+| **Phase row** | Phase name, agent count, token total, elapsed time | `phase` events + `agent_start`/`agent_end` in journal | same columns, sourced from JSONL |
+| **Agent drill-down** | Enter on phase → agent list; Enter on agent → prompt, recent tool calls, result | journal has promptHash/label/result/kind; no tool-call stream | agent detail drawer from `agent_end` + `attempt` events |
+| **Run controls** | `p` pause/resume, `x` stop agent or whole run, `r` restart agent, `f` filter by status | none (CLI is fire-and-forget) | v2+; needs runtime hooks — **not v0** |
+| **`workflow_log` stream** | Human progress lines via synthetic progress channel (`log()` → UI) | `log` events in journal; `--pretty` ignores them today | show `log` lines inline in progress view |
+| **Save workflow** | `s` in `/workflows` → `.claude/workflows/<name>` | workflow already a file in repo | N/A (omw workflows are files by design) |
+| **Resume in session** | Paused run resumes; completed agents return from cache | `--resume` + per-node cache flags in journal | resume diff UI (cached vs live per call) |
+| **Cost visibility** | Per-agent token usage in `/workflows` while running | `budget.spent()` + optional `outputTokens` in adapter meta | token column when adapters report usage |
+| **Background + responsive** | Script runs in isolated env; chat stays clean; final return only | same separation if in-session; CLI runs block the shell unless backgrounded externally | in-session monitor + optional detached `omw run` |
+
+### Native UX principles worth copying (not cloning)
+
+1. **Plan before run** — `meta.name` + `meta.phases[]` shown *before* spawning agents (AST-extracted in native; module export in omw). User/agent sees scope, not a black box.
+2. **Progress without context pollution** — intermediate noise stays out of the main conversation; only the final JSON hits stdout. omw already does this; studio makes the *side channel* visible.
+3. **Shallow tree, deep drill-down** — phase list first, agents second, detail third. Matches `renderTree()` shape:
+
+   ```
+   run r-abc (examples/deep-research)
+     ▸ Search
+       • search:a [fake]
+         ✓ call#2
+   ```
+
+4. **Simple TUI, not a canvas** — arrow keys, Enter, Esc. No node-graph editor. Studio v0 should be the same altitude: **terminal-like or narrow web panel**, not Figma for workflows.
+5. **Same vocabulary on CLI and Desktop** — debounced task summary mirrored to LocalSessionManager (archaeology). omw analog: one `renderTree` / JSON API consumed by CLI (`--pretty`), web studio, and VS Code webview.
+
+### Explicit non-parity (ok to defer)
+
+- FleetView / multi-workflow fleet management
+- Pause/restart/stop per agent (needs runtime control plane)
+- Permission-mode-specific approval flows
+- `ultracode` / `/effort` session modes
+- Worktree isolation UI
+
 ## Non-goals (v0)
 
 - Not a visual DAG editor that replaces plain-JS authoring (agent-first stays primary)
@@ -41,22 +87,28 @@ A **Workflow Studio** (name TBD: Studio / Console / Portal) would be a **read-mo
 
 ## Candidate surfaces (pick 1–2 for a v0 spike)
 
-### 1. Run Explorer (journal viewer)
+### 1. Run Explorer — `/workflows` twin (journal viewer)
 
-- Load a journal file or tail live JSONL
-- Phase tree + per-node: label, adapter, ok/kind, duration, cached, attempt trail
-- Click `agent_end` → stderr / rawText / schema errors
-- Diff two journals (resume probe: which calls flipped cached→live)
+Mirror the native `/workflows` progress view, backed by JSONL instead of host internals:
 
-**Smallest valuable slice.** Mostly a structured viewer over existing events.
+- **Run list** — scan `.omw/*.jsonl` (like `/workflows` run picker)
+- **Phase table** — title, agent count, ok/failed, duration sum, tokens if present
+- **Drill-down** — phase → agents (`label` / `call#`) → detail (`attempt` trail, `kind`, `rawText`, `stderr`)
+- **Live tail** — watch file grow during `omw run` (task-panel strip + expandable tree)
+- **Resume diff** — two journals side-by-side; highlight `cached:true` → live flips
 
-### 2. Run Launcher
+**Smallest valuable slice.** Mostly a structured viewer over existing events — the honest open twin of native's watch UI.
 
-- Form for: workflow path, `--agent`, `--args` JSON, concurrency, budget, resume
-- Spawn `omw run` as subprocess; stream stderr pretty tree + stdout result
-- Show exit code semantics (0/1/3/4) inline
+### 2. Run Launcher — approval + spawn
 
-Thin wrapper — but lowers friction for non-agent humans and demos.
+Native shows planned phases before Yes/No. omw launcher:
+
+- Read `export const meta` from workflow module (name, phases, description)
+- Form: workflow path, `--agent`, `--args` JSON, concurrency, budget, resume
+- **Approve card** (Desktop-like) or CLI confirm — then spawn `omw run`
+- Stream stderr pretty tree + stdout result; exit code semantics (0/1/3/4) inline
+
+Thin wrapper — but matches the native "see the plan, then run" rhythm.
 
 ### 3. Workflow Copilot panel (authoring aid)
 
@@ -102,22 +154,28 @@ Aligns with the in-session-unified transport policy.
 
 ```
 studio/
-  ├── serve a Run Explorer over .omw/*.jsonl
+  ├── Run list + phase/agent drill-down (native /workflows shape)
+  ├── live tail of .omw/<runId>.jsonl during omw run
   ├── reuse parseJournalLines + renderTree from src/
-  └── optional: spawn omw run via CLI wrapper
+  └── optional: meta-driven approve card before spawn
 ```
 
 Success criteria:
 
-- Open `examples/deep-research` fake run journal → see phase tree, failed node kind, self-repair attempt line
-- Diff resume run vs original → cached flags visible per call
+- Fake `deep-research` run → phase table matches native docs screenshot *shape* (phases, agent rows, ✓/✗)
+- Self-repair visible: `attempt` with `schema_violation` then `ok` on same call
+- Resume diff: upstream edit → which calls flipped `cached` (validates `--strict-resume` story)
+- `log()` events visible in progress strip (native `workflow_log` analog)
 - Zero duplication of runtime logic (import from package or shared module)
 
 ## References
 
-- Product spec: `docs/specs/2026-06-12-oh-my-workflow-design.md` (agent-first, no TUI in v1 — **this open Q revisits that for a studio, not a full TUI**)
-- Open twin design: `docs/specs/2026-06-23-omw-open-dynamic-workflow-twin-design.md`
-- Native WF archaeology: `docs/research/2026-06-17-native-wf-for-omw.md`
+- **Native UI (primary):** [Claude Code — Orchestrate subagents with dynamic workflows](https://code.claude.com/docs/en/workflows) (`/workflows` TUI, task panel, approval, save)
+- Product spec: `docs/specs/2026-06-12-oh-my-workflow-design.md` (agent-first, no TUI in v1 — **this open Q revisits that for a studio, not a fleet TUI**)
+- Open twin design: `docs/specs/2026-06-23-omw-open-dynamic-workflow-twin-design.md` (`meta` → plan UI)
+- Native WF archaeology: `docs/research/2026-06-17-claude-code-internals-archaeology.md` (`workflow_log`, task_summary, FleetView)
+- Native gap analysis: `docs/research/2026-06-17-native-wf-for-omw.md`
+- omw `--pretty` renderer: `src/cli/run.ts` (`renderTree`)
 
 ## Decision needed
 
