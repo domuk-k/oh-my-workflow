@@ -373,18 +373,33 @@ bunx github:domuk-k/oh-my-workflow run my-workflow.js --args '{"q":"…"}' --pre
 
 ### In-session execution
 
-When this skill is running inside a coding-agent host that can call subagents or
-task agents directly, the intended flow is:
+When this skill runs inside a host that can spawn subagents/task agents, prefer
+the **in-session transport** over shelling out to `claude -p` in the same process:
 
-1. Write a portable `workflow.js`.
-2. Build a tiny host runner that imports `workflow.js`, creates
-   `makeRuntime({ adapter: makeInSessionAdapter({ invoke }) })`, and maps
-   `invoke(req)` to the host's own agent/subagent callback.
-3. Run that host runner immediately in the same session.
+1. Write a portable `workflow.js` (no host APIs inside it).
+2. Run with **`omw run workflow.js --agent in-session`** or **`--agent auto`**
+   (auto picks in-session when `probeInSessionHost()` finds a callback — today:
+   Kiro's subagent tool — else falls through to installed CLIs).
+3. Or call **`runInSessionWorkflow()`** from the `oh-my-workflow/in-session`
+   export in a tiny host runner — probe → `makeRuntime` → run; **no CLI
+   subprocess fallback**; exit `3` with `in_session_unavailable` when no host.
 
-Do not put host-specific APIs in `workflow.js`. The workflow should keep working
-under `omw run workflow.js --agent fake|claude|codex`; only the runner changes
-between hosts.
+```ts
+import { runInSessionWorkflow } from "oh-my-workflow/in-session";
+
+const outcome = await runInSessionWorkflow(
+  { wfPath: "./workflow.js", args: { q: "…" }, strictResume: true },
+  { stderr: (line) => process.stderr.write(line) },
+);
+// outcome.exitCode === 0 → parse outcome.stdout; else read outcome.error
+```
+
+For hosts without a built-in probe, wire `makeInSessionAdapter({ invoke })` and
+map `invoke(req)` (and `req.sessionId` on follow-ups) to the host's subagent API.
+See `oh-my-workflow/adapters/in-session-probe` to extend detection.
+
+Do not put host-specific APIs in `workflow.js`. The same file must still run under
+`omw run workflow.js --agent fake|claude|codex`.
 
 ### Exit codes
 
@@ -439,7 +454,11 @@ Failure `kind`s on `agent_end`:
 `omw replay .omw/<runId>.jsonl [--json]` reconstructs the tree / a stats summary
 from a journal — a read-only **fixture replay** (reading back what a run
 recorded). For *live* resume (re-running nodes whose key changed, reusing the
-cached ones), use `omw run <wf> --resume <journal|runId>` — see Scope below.
+cached ones), use `omw run <wf> --resume <journal|runId>`. Add **`--strict-resume`**
+when a workflow might pass state out-of-band (filesystem, closure vars): on the
+first cache **miss** by call index, every **later** call runs live even if its
+key still hits — prefix truncation after the first stale sibling. Default
+(without the flag) is per-node key-match only.
 
 `omw validate <wf> [--json]` is a pre-flight that loads the module and lints a
 `fake` fixture for the silent-degradation traps (top-level `responses`, a string
@@ -507,12 +526,12 @@ agent/subagent callback directly.
 
 | adapter | status | invoke | structured out | in-session follow-up |
 |---|---|---|---|---|
-| **fake** | built-in, free, deterministic | in-process fixtures | as scripted | yes (fixture) |
+| **fake** | built-in, free, deterministic | in-process fixtures | as scripted | yes (fixture session) |
+| **in-session** | **host probe** (Kiro today) | `probeInSessionHost()` or injected callback | extracted summary/text | yes (`sessionId` on host) |
 | **claude** | **full** (live-verified, claude 2.1.x) | `claude -p <p> --output-format json --strict-mcp-config` | parse `.result` | `--resume` (same cwd) |
 | **codex** | **experimental** (live-verified, codex 0.137.x) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` (same cwd) |
 | **hermes** | **experimental** | `hermes -z <prompt> --yolo` | stdout IS the response (heuristic JSON extract) | — (fresh retries) |
 | **pi** | planned | `pi --print` | stdout | — |
-| **in-session** | **experimental bridge** | injected host callback | extracted summary/text | — (fresh retries) |
 
 > The "in-session follow-up" column is the adapter flag the **schema gate** uses to
 > re-prompt a node in the same session — *not* run-level resume. Run-level resume
@@ -531,16 +550,17 @@ agent/subagent callback directly.
 - **codex** is experimental: it has **no cost field** (tokens only, so `costUsd`
   stays undefined), and its JSONL can include malformed lines under MCP
   (openai/codex#15451) — omw tolerates them line-by-line and fails *actionably*
-  rather than returning empty. Default sandbox is `workspace-write`.
+  rather than returning empty. Default sandbox is `workspace-write`. `inheritMcp`
+  is **not implemented** — passing it logs a one-time warn and is ignored.
 - **hermes** is experimental: `-z/--oneshot` prints only the response text, so the
   result is stdout (no JSON envelope; schema-gate extracts JSON heuristically).
   `--yolo` runs it non-interactively. No in-session followUp (no session id on
   stdout) → schema retries use fresh invokes. No cost field.
 - **pi** isn't wired yet (`--agent pi` → exit 3 with an install hint).
-- **in-session** is not a normal `omw run --agent <name>` subprocess adapter.
-  It is an experimental bridge for any coding-agent host that can provide an
-  agent/subagent callback. The workflow stays portable JavaScript
-  (`workflow.js`); host-specific glue lives in the runner:
+- **in-session** is not a subprocess adapter. `omw run --agent in-session` (or
+  `auto` when `probeInSessionHost()` succeeds) uses the live host callback; if
+  none is detected → exit `3` with `in_session_unavailable` — **no fallback** to
+  `claude -p`. For manual wiring when probe doesn't know your host yet:
 
   ```ts
   import { makeRuntime } from "oh-my-workflow";
@@ -550,21 +570,20 @@ agent/subagent callback directly.
   const workflow = await import("./workflow.js");
   const adapter = makeInSessionAdapter({
     name: "current-session",
-    invoke: async (req) => {
-      // Host-specific: call the current coding agent's subagent/task API here.
-      return hostAgent(req.prompt, req);
-    },
+    invoke: async (req) => hostAgent(req.prompt, req), // pass req.sessionId on follow-ups
   });
 
   const rt = makeRuntime({ adapter, journal: makeJournal(), concurrency: 4 });
   const result = await workflow.default(rt, {});
   ```
 
-  If the host does not expose such a callback, use the CLI adapters instead.
+  Prefer `runInSessionWorkflow()` (see **In-session execution** above) when you
+  want probe + exit codes without reimplementing the CLI runner.
 
-Missing CLI → exit 3 with `install_hint`. Run `--agent fake` any time for the
-free path. `--agent auto` is the default: it honors `OMW_AGENT`, then host
-environment hints, then installed CLIs (`claude`, `codex`, `hermes`).
+Missing headless CLI → exit `3` with `install_hint`. Run `--agent fake` any time
+for the free path. **`--agent auto`** (default) order: `OMW_AGENT` pin (if set)
+→ **in-session when probed** → host env hints (`CLAUDECODE`, `CODEX_*`, …) →
+first installed CLI among `claude`, `codex`, `hermes`.
 
 ---
 
@@ -597,8 +616,8 @@ output; `agent` opts `effort`/`agentType`/`isolation:'worktree'`; `budget` with 
 shared spend pool and a `BudgetExceededError` ceiling; nested `workflow()` (one
 level); a step-by-step journal; the resume key `(callIndex, promptHash,
 optsHash)` (frozen, byte-stable, and keyed on the **semantic** opts subset);
-**live resume** via `omw run --resume <journal|runId>`; and an opt-in `--strict`
-determinism sandbox.
+**live resume** via `omw run --resume <journal|runId>` (opt-in **`--strict-resume`**
+prefix truncation); and an opt-in `--strict` determinism sandbox.
 
 > One honest altitude difference even here: a CC Workflow node is a single
 > in-harness subagent; an **omw node is a whole external coding-agent CLI**
@@ -618,8 +637,9 @@ determinism sandbox.
   idiom — and that channel is invisible to the key. Edit node 1 → on resume it
   re-runs and writes different files, but node 2 **hits its cache and serves a
   summary of the old files** (silently stale). Remedies: (a) re-run fresh (drop
-  `--resume`), or (b) thread a content digest of the changed files into the
-  downstream prompt so its hash moves. A dependency-aware cascade is v2.
+  `--resume`), (b) thread a content digest into the downstream prompt so its hash
+  moves, or (c) pass **`--strict-resume`** so the first miss truncates the
+  prefix (later siblings re-run live). A dependency-aware cascade is v2.
 - *`budget` counts reported output tokens only*: a token-less failure (a killed
   timeout) can't be counted, so pair `--budget` with your own iteration cap when a
   node may fail without producing tokens.
@@ -635,7 +655,8 @@ but cross-CLI routing is future work). Don't write scripts that assume these.
 
 - Module: `export default async ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result` · optional `export const meta` / `export const fake`. (Legacy `(rt, args)` still runs; `omw codemod <file>` migrates it.)
 - Path resolves a directory to `workflow.js` / `workflow.ts` / `index.js` / `index.ts`.
-- `omw run <wf> [--agent <auto|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]`
+- `omw run <wf> [--agent <auto|in-session|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]`
+- `runInSessionWorkflow({ wfPath, args?, concurrency?, budget?, strictResume?, strict? })` — `oh-my-workflow/in-session`; exit `3` when no host probe.
 - `omw replay <journal.jsonl> [--json]`
 - `omw validate <wf> [--json]` — pre-flight: load + fake-fixture lint, no agents spawned.
 - `omw codemod <file> [--to-di] [--write]` — migrate a legacy `(rt, args)` workflow to destructured DI.
