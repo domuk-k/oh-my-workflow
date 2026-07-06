@@ -166,11 +166,16 @@ export function makeRuntime(deps: {
   /** Injected for isolation:'worktree'; defaults to the real git-backed helper.
    *  Overridable so the runtime is testable without a git subprocess. */
   withWorktree?: typeof defaultWithWorktree;
+  /** When true with a resume index, the first cache MISS by call index forces
+   *  every later call live even if its key still hits — prefix-truncation for
+   *  workflows that might pass state out-of-band. Default false (per-node reuse). */
+  strictResume?: boolean;
 }): Runtime {
   const { adapter, journal, resume } = deps;
   const withWorktree = deps.withWorktree ?? defaultWithWorktree;
   const limit = makeLimiter(deps.concurrency ?? 4);
   let callCounter = 0;
+  let strictResumeMissAt: number | null = null;
   let currentPhase: string | undefined;
   const budgetTotal = deps.budget ?? null;
   const budgetState: BudgetState = deps.budgetState ?? { spent: 0 };
@@ -207,9 +212,14 @@ export function makeRuntime(deps: {
     // emits agent_end so every start has a matching end (the spine invariant).
     if (resume) {
       const hit = resume.lookup({ call, promptHash: pHash, optsHash: oHash });
-      if (hit.found) {
+      const forceLive =
+        deps.strictResume && strictResumeMissAt !== null && call > strictResumeMissAt;
+      if (hit.found && !forceLive) {
         journal.agentEnd({ call, ok: true, result: hit.value, durationMs: 0, cached: true });
         return hit.value;
+      }
+      if (!hit.found && deps.strictResume && strictResumeMissAt === null) {
+        strictResumeMissAt = call;
       }
     }
 

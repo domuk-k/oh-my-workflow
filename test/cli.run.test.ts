@@ -108,6 +108,7 @@ describe("parseRunArgs", () => {
       concurrency: 8,
       pretty: true,
       strict: false,
+      strictResume: false,
     });
   });
 
@@ -124,6 +125,13 @@ describe("parseRunArgs", () => {
     if (!r.ok) throw new Error("expected ok");
     expect(r.value.budget).toBe(5000);
     expect(r.value.strict).toBe(true);
+  });
+
+  test("parses --strict-resume (boolean)", () => {
+    const r = parseRunArgs(["w", "--agent", "fake", "--resume", ".omw/r-1.jsonl", "--strict-resume"]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.value.strictResume).toBe(true);
   });
 
   test("--budget must be a positive integer", () => {

@@ -1,6 +1,9 @@
-import type { AgentFailureKind, AgentPort, AgentResult, InvokeRequest } from "./types";
+import type { AgentFailureKind, AgentPort, AgentResult, FollowUpOpts, InvokeRequest } from "./types";
 
-export type InSessionInvoke = (req: InvokeRequest) => Promise<unknown>;
+/** Host invoke may carry a prior session id on follow-up turns. */
+export type InSessionRequest = InvokeRequest & { sessionId?: string };
+
+export type InSessionInvoke = (req: InSessionRequest) => Promise<unknown>;
 
 export type InSessionAdapterOptions = {
   /** Adapter name surfaced in the journal. Use the host name when useful. */
@@ -82,6 +85,52 @@ function defaultClassifyError(e: unknown): AgentFailureKind {
   return text.includes("timeout") || text.includes("timed out") ? "timeout" : "nonzero_exit";
 }
 
+function extractSessionId(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  for (const key of ["sessionId", "session_id", "convo_id", "convoId", "thread_id"] as const) {
+    if (typeof value[key] === "string" && value[key]) return value[key];
+  }
+  for (const key of ["result", "meta", "data"] as const) {
+    const nested = value[key];
+    const sid = extractSessionId(nested);
+    if (sid) return sid;
+  }
+  return undefined;
+}
+
+async function runInSession(
+  opts: InSessionAdapterOptions,
+  req: InSessionRequest,
+  start: number,
+  duration: (s: number) => number,
+  extractText: (value: unknown) => string | undefined,
+  classifyError: (e: unknown) => AgentFailureKind,
+): Promise<AgentResult> {
+  try {
+    const result = await opts.invoke(req);
+    if (isAgentResult(result)) return result;
+
+    const text = extractText(result)?.trim();
+    if (!text) {
+      return {
+        ok: false,
+        kind: "nonzero_exit",
+        stderr: `in-session adapter returned no text: ${preview(result)}`,
+        meta: { durationMs: duration(start) },
+      };
+    }
+    const sessionId = extractSessionId(result);
+    return { ok: true, text, meta: { durationMs: duration(start), sessionId } };
+  } catch (e) {
+    return {
+      ok: false,
+      kind: classifyError(e),
+      stderr: errMsg(e),
+      meta: { durationMs: duration(start) },
+    };
+  }
+}
+
 export function makeInSessionAdapter(opts: InSessionAdapterOptions): AgentPort {
   const now = opts.now ?? (() => Date.now());
   const extractText = opts.extractText ?? extractInSessionText;
@@ -92,29 +141,23 @@ export function makeInSessionAdapter(opts: InSessionAdapterOptions): AgentPort {
   return {
     name: opts.name ?? "in-session",
     async invoke(req: InvokeRequest): Promise<AgentResult> {
-      const start = now();
-      try {
-        const result = await opts.invoke(req);
-        if (isAgentResult(result)) return result;
-
-        const text = extractText(result)?.trim();
-        if (!text) {
-          return {
-            ok: false,
-            kind: "nonzero_exit",
-            stderr: `in-session adapter returned no text: ${preview(result)}`,
-            meta: { durationMs: duration(start) },
-          };
-        }
-        return { ok: true, text, meta: { durationMs: duration(start) } };
-      } catch (e) {
-        return {
-          ok: false,
-          kind: classifyError(e),
-          stderr: errMsg(e),
-          meta: { durationMs: duration(start) },
-        };
-      }
+      return runInSession(opts, req, now(), duration, extractText, classifyError);
+    },
+    async followUp(sessionId: string, prompt: string, followOpts?: FollowUpOpts): Promise<AgentResult> {
+      return runInSession(
+        opts,
+        {
+          prompt,
+          sessionId,
+          cwd: followOpts?.cwd,
+          inheritMcp: followOpts?.inheritMcp,
+          timeoutMs: followOpts?.timeoutMs,
+        },
+        now(),
+        duration,
+        extractText,
+        classifyError,
+      );
     },
   };
 }

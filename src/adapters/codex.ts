@@ -77,6 +77,8 @@ export type CodexAdapterDeps = {
   /** codex sandbox policy. Defaults to workspace-write (a coding node needs to
    *  write); override to read-only for safe demos or danger-full-access. */
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+  /** Diagnostic sink for honest-scope notices. Defaults to console.error. */
+  warn?: (msg: string) => void;
 };
 
 function defaultSpawn(bin: string): Spawn {
@@ -108,6 +110,13 @@ function defaultSpawn(bin: string): Spawn {
 export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
   const spawn = deps.spawn ?? defaultSpawn(deps.bin ?? "codex");
   const sandbox = deps.sandbox ?? "workspace-write";
+  const warn = deps.warn ?? ((m: string) => console.error(m));
+  const warnedFields = new Set<string>();
+  const warnUnmapped = (field: string, value: unknown) => {
+    if (warnedFields.has(field)) return;
+    warnedFields.add(field);
+    warn(`omw(codex): \`${field}\` (=${String(value)}) is not implemented for codex exec; dropped for this run.`);
+  };
 
   async function run(args: string[], cwd?: string, timeoutMs?: number): Promise<AgentResult> {
     let res: SpawnResult;
@@ -138,6 +147,9 @@ export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
     invoke(req: InvokeRequest): Promise<AgentResult> {
       const args = ["exec", "--json", "-s", sandbox];
       if (req.model) args.push("-m", req.model);
+      if (req.inheritMcp) warnUnmapped("inheritMcp", req.inheritMcp);
+      if (req.effort !== undefined) warnUnmapped("effort", req.effort);
+      if (req.agentType !== undefined) warnUnmapped("agentType", req.agentType);
       args.push(req.prompt);
       return run(args, req.cwd, req.timeoutMs);
     },

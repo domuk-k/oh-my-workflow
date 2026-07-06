@@ -464,6 +464,29 @@ describe("runtime.agent — resume full-prefix cache (parallel fan-out)", () => 
     const ends = j2.events().filter((e) => e.ev === "agent_end") as Extract<JournalEvent, { ev: "agent_end" }>[];
     expect(ends.map((e) => e.cached ?? false)).toEqual([true, true, true, true, false]);
   });
+
+  test("strictResume: first miss forces later siblings live even when keys still hit", async () => {
+    const j1 = makeJournal({ now: () => 0 });
+    await miniWorkflow(makeRuntime({ adapter: miniAdapter(), journal: j1 }));
+
+    const j2 = makeJournal({ now: () => 0 });
+    const a2 = countingAdapter();
+    const resume = makeResumeIndex(j1.events());
+    const rt2 = makeRuntime({ adapter: a2, journal: j2, resume, strictResume: true });
+
+    rt2.phase("Scope");
+    await rt2.agent("SCOPE EDITED", { schema: numSchema });
+    rt2.phase("Search");
+    await rt2.parallel(
+      ["a", "b", "c"].map((t) => () => rt2.agent(`SEARCH ${t}`, { schema: numSchema, label: `search:${t}` })),
+    );
+    rt2.phase("Synth");
+    await rt2.agent("SYNTH", { schema: numSchema });
+
+    expect(a2.calls()).toBe(5);
+    const ends = j2.events().filter((e) => e.ev === "agent_end") as Extract<JournalEvent, { ev: "agent_end" }>[];
+    expect(ends.every((e) => !e.cached)).toBe(true);
+  });
 });
 
 describe("runtime — model precedence (opts > phase > meta default)", () => {

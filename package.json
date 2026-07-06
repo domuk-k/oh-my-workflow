@@ -24,9 +24,13 @@
   "bugs": "https://github.com/domuk-k/oh-my-workflow/issues",
   "exports": {
     ".": "./src/runtime.ts",
+    "./ambient": "./src/ambient.ts",
+    "./in-session": "./src/in-session-run.ts",
     "./journal": "./src/journal.ts",
     "./adapters/fake": "./src/adapters/fake.ts",
     "./adapters/in-session": "./src/adapters/in-session.ts",
+    "./adapters/in-session-probe": "./src/adapters/in-session-probe.ts",
+    "./adapters/kiro-in-session": "./src/adapters/kiro-in-session.ts",
     "./adapters/types": "./src/adapters/types.ts",
     "./package.json": "./package.json"
   },

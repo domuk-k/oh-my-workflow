@@ -11,6 +11,12 @@ import { makeFakeAdapter, type FakeAdapterOptions } from "../adapters/fake";
 import { makeClaudeAdapter } from "../adapters/claude";
 import { makeCodexAdapter } from "../adapters/codex";
 import { makeHermesAdapter } from "../adapters/hermes";
+import {
+  IN_SESSION_UNAVAILABLE_HINT,
+  probeInSessionHost,
+  resolveInSessionAdapter,
+  type InSessionProbeResult,
+} from "../adapters/in-session-probe";
 import type { Runtime, WorkflowMeta } from "../runtime";
 import { makeRuntime } from "../runtime";
 import { makeJournal, parseJournalLines, type JournalEvent } from "../journal";
@@ -28,6 +34,9 @@ export type RunOptions = {
   /** Opt-in determinism sandbox: forbid Date/Math.random in the script body so a
    *  run is reproducible (matches native dynamic-workflow's freeze-throw). */
   strict?: boolean;
+  /** Opt-in resume safety: after the first cache MISS by call index, force every
+   *  later node live even when its key still hits (prefix truncation). */
+  strictResume?: boolean;
   /** Token ceiling for the whole run; agent() throws BudgetExceededError once the
    *  shared spend reaches it. */
   budget?: number;
@@ -46,6 +55,7 @@ export function parseRunArgs(argv: string[]): ParseResult {
   let resume: string | undefined;
   let budget: number | undefined;
   let strict = false;
+  let strictResume = false;
 
   for (let i = 0; i < argv.length; i++) {
     const tok = argv[i]!;
@@ -86,6 +96,9 @@ export function parseRunArgs(argv: string[]): ParseResult {
       case "--strict":
         strict = true;
         break;
+      case "--strict-resume":
+        strictResume = true;
+        break;
       case "--resume":
         resume = argv[++i];
         if (!resume) return { ok: false, error: "--resume requires a journal path" };
@@ -98,7 +111,10 @@ export function parseRunArgs(argv: string[]): ParseResult {
 
   if (wfPath === undefined) return { ok: false, error: "missing workflow path" };
 
-  return { ok: true, value: { wfPath, agent: agent ?? "auto", args, concurrency, pretty, resume, budget, strict } };
+  return {
+    ok: true,
+    value: { wfPath, agent: agent ?? "auto", args, concurrency, pretty, resume, budget, strict, strictResume },
+  };
 }
 
 // ── workflow execution ──────────────────────────────────────────────────────
@@ -302,6 +318,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
     journal,
     concurrency: opts.concurrency,
     resume: deps.resume,
+    strictResume: opts.strictResume,
     budget: opts.budget,
     budgetState,
     meta: loaded.meta,
@@ -320,6 +337,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
         journal,
         concurrency: opts.concurrency,
         resume: deps.resume,
+        strictResume: opts.strictResume,
         budget: opts.budget,
         budgetState,
         meta: childLoaded.meta,
@@ -380,6 +398,7 @@ const INSTALL_HINTS: Record<string, string> = {
   codex: "npm i -g @openai/codex  (experimental adapter)",
   hermes: "install the Hermes Agent CLI, then `hermes login`  (experimental adapter)",
   pi: "see https://github.com/parallel-ai/pi  (experimental adapter)",
+  "in-session": IN_SESSION_UNAVAILABLE_HINT,
 };
 
 /** PATH probe — injected so the missing→installed branch is testable. */
@@ -390,9 +409,14 @@ function unique<T>(items: T[]): T[] {
   return [...new Set(items)];
 }
 
-function autoCandidates(env: Record<string, string | undefined>): string[] {
+function autoCandidates(
+  env: Record<string, string | undefined>,
+  probe: () => InSessionProbeResult = probeInSessionHost,
+): string[] {
   const explicit = env.OMW_AGENT?.trim().toLowerCase();
   if (explicit && explicit !== "auto") return [explicit];
+
+  const inHost: string[] = probe().ok ? ["in-session"] : [];
 
   const keys = new Set(Object.keys(env).map((k) => k.toUpperCase()));
   const hostHints: string[] = [];
@@ -406,7 +430,9 @@ function autoCandidates(env: Record<string, string | undefined>): string[] {
     hostHints.push("hermes");
   }
 
-  return unique([...hostHints, ...AUTO_ADAPTERS]);
+  // In-session first when the host exposes a callback — unify on the live session,
+  // not a subprocess masquerading as the same thing.
+  return unique([...inHost, ...hostHints, ...AUTO_ADAPTERS]);
 }
 
 function makeNamedAdapter(name: string, wf: LoadedWorkflow): AgentPort | undefined {
@@ -422,11 +448,18 @@ export function resolveAdapter(
   wf: LoadedWorkflow,
   binExists: (bin: string) => boolean = defaultBinExists,
   env: Record<string, string | undefined> = process.env,
+  probe: () => InSessionProbeResult = probeInSessionHost,
 ): AdapterResolution {
   if (name === "fake") return { adapter: makeFakeAdapter(wf.fake) };
+  if (name === "in-session") return resolveInSessionAdapter(probe);
   if (name === "auto") {
-    const candidates = autoCandidates(env);
+    const candidates = autoCandidates(env, probe);
     for (const candidate of candidates) {
+      if (candidate === "in-session") {
+        const resolved = resolveInSessionAdapter(probe);
+        if ("adapter" in resolved) return resolved;
+        continue;
+      }
       const adapter = makeNamedAdapter(candidate, wf);
       if (candidate === "fake" && adapter) return { adapter };
       if (adapter && binExists(candidate)) return { adapter };
@@ -485,7 +518,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   if (!parsed.ok) {
     io.stderr(JSON.stringify({ error: "usage", message: parsed.error }));
     io.stderr(
-      "\nusage: omw run <workflow> [--agent <auto|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]",
+      "\nusage: omw run <workflow> [--agent <auto|in-session|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]",
     );
     return 2;
   }

@@ -150,4 +150,16 @@ describe("makeCodexAdapter (injected spawn)", () => {
     expect(r.kind).toBe("nonzero_exit");
     expect(r.stderr).toContain("boom");
   });
+
+  test("warns once when inheritMcp is requested but not implemented", async () => {
+    const warnings: string[] = [];
+    const adapter = makeCodexAdapter({
+      warn: (m) => warnings.push(m),
+      spawn: async () => ({ code: 0, stdout: goldenJsonl, stderr: "" }),
+    });
+    await adapter.invoke({ prompt: "x", inheritMcp: true });
+    await adapter.invoke({ prompt: "y", inheritMcp: true });
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toContain("inheritMcp");
+  });
 });

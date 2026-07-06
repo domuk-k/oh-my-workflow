@@ -89,4 +89,32 @@ describe("makeInSessionAdapter", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.kind).toBe("timeout");
   });
+
+  test("followUp passes sessionId to the host callback for in-session repair", async () => {
+    let capturedSession = "";
+    const adapter = makeInSessionAdapter({
+      invoke: async (req) => {
+        capturedSession = req.sessionId ?? "";
+        return { summary: '{"n":2}' };
+      },
+    });
+
+    const first = await adapter.invoke({ prompt: "start" });
+    expect(first.ok).toBe(true);
+
+    const repaired = await adapter.followUp!("sess-9", "fix json");
+    expect(repaired.ok).toBe(true);
+    if (repaired.ok) expect(repaired.text).toBe('{"n":2}');
+    expect(capturedSession).toBe("sess-9");
+  });
+
+  test("surfaces sessionId from host payloads for schema-gate followUp", async () => {
+    const adapter = makeInSessionAdapter({
+      invoke: async () => ({ convo_id: "c-42", summary: '{"ok":true}' }),
+    });
+
+    const result = await adapter.invoke({ prompt: "hello" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.meta.sessionId).toBe("c-42");
+  });
 });

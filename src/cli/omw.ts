@@ -31,7 +31,7 @@ async function main(argv: string[]): Promise<number> {
       io.stderr(
         "usage: omw <command>\n\n" +
           "commands:\n" +
-          "  run <workflow> [--agent <auto|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict] [--pretty]\n" +
+          "  run <workflow> [--agent <auto|in-session|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]\n" +
           "  replay <journal.jsonl> [--json]\n" +
           "  validate <workflow> [--json]\n" +
           "  skill install [--project]   install the omw authoring skill for your coding agent\n" +
