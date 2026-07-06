@@ -8,12 +8,11 @@ All notable changes to this project are documented here. This project adheres to
 Re-surfaces omw as the **open twin of Claude Code's native dynamic Workflow** —
 same authoring shape and vocabulary, external coding-agent CLI nodes, no magic.
 
-### Launch readiness
+### Docs & onboarding
 
 - Added a Vercel-ready static docs site (`docs/site`, built with `bun run docs:build`)
   that leads with `/omw` skill onboarding, why the timing matters, the seven-hook
-  API, core patterns, and verification proof.
-- Added a Show HN / GeekNews launch note at `docs/launch/show-hn.md`.
+  API, core patterns, and quality signals.
 - CI now builds the docs site in addition to typecheck and tests.
 - `omw run <workflow>` now defaults to `--agent auto`, so an installed skill can
   run the workflow without asking the user to pick Claude, Codex, or Hermes.

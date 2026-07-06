@@ -1,6 +1,6 @@
-# Show HN / GeekNews launch note
+# Community launch draft
 
-> **Template.** Copy to `docs/launch/` (gitignored) and edit before posting.
+> Maintainer template — copy to `docs/launch/` (gitignored) and edit before posting.
 >
 > ```sh
 > mkdir -p docs/launch && cp docs/launch.example/show-hn.md docs/launch/

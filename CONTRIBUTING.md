@@ -36,4 +36,4 @@ Live adapter tests (`claude`, `codex`) run only with `OMW_LIVE=1` and the corres
 - **Nodes are whole agent CLIs**, not raw LLM API calls.
 - **Honest scope:** label experimental adapters; do not silently no-op options (warn once).
 
-See [ROADMAP.md](ROADMAP.md) for planned work. Maintainer-local (gitignored): `docs/tasks/` (kanban), `docs/launch/` (Show HN drafts), `docs/research/` (scratch). Templates: `docs/tasks.example/`, `docs/launch.example/`.
+See [ROADMAP.md](ROADMAP.md) for direction.

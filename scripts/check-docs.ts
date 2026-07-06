@@ -26,7 +26,7 @@ for (const phrase of [
   "Add one command to your coding agent.",
   "Why now",
   "The whole runtime is seven hooks.",
-  "Launch proof",
+  "Quality bar",
   "npx skills add domuk-k/oh-my-workflow --skill omw",
   "--agent auto",
 ]) {

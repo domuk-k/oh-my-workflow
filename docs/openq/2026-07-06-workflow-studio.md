@@ -1,7 +1,6 @@
 # Open Q — omw Workflow Studio (UI)
 
 > Status: **open question** · not a spec · 2026-07-06
-> GitHub: https://github.com/domuk-k/oh-my-workflow/issues/4
 
 ## Why this might matter
 

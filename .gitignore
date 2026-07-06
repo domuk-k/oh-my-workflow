@@ -6,7 +6,9 @@ dist/
 .DS_Store
 .vercel
 
-# Maintainer-local (kanban, launch drafts, research scratch — not published)
+# Maintainer-local (not published)
 docs/tasks/
 docs/launch/
 docs/research/
+docs/plans/
+docs/specs/*-handoff.md

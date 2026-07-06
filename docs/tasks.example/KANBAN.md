@@ -1,12 +1,8 @@
-# omw — kanban (local)
+# Kanban (maintainer template)
 
-> **This folder is a template.** Copy to `docs/tasks/` (gitignored) and edit there.
+> Copy to `docs/tasks/` (gitignored): `mkdir -p docs/tasks && cp docs/tasks.example/KANBAN.md docs/tasks/`
 >
-> ```sh
-> mkdir -p docs/tasks && cp docs/tasks.example/KANBAN.md docs/tasks/
-> ```
->
-> Public north star: [ROADMAP.md](../../ROADMAP.md) · Open Qs: `docs/openq/` (tracked)
+> Direction: [ROADMAP.md](../../ROADMAP.md)
 
 _Last updated: YYYY-MM-DD_
 
@@ -34,7 +30,7 @@ _Last updated: YYYY-MM-DD_
 
 ### Phase 1 — discovery
 
-- [ ] Show HN / GeekNews (`docs/launch/show-hn.md` — copy from `docs/launch.example/`)
+- [ ] Community launch (`docs/launch/` — copy from `docs/launch.example/`)
 - [ ] Verify `npx skills add` install path
 - [ ] 90s asciinema: `deep-research --agent fake --pretty`
 - [ ] Example: verify-vote workflow
