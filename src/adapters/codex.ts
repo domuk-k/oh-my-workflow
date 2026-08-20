@@ -21,6 +21,7 @@ export function parseCodexJsonl(stdout: string): AgentResult {
   let threadId: string | undefined;
   let lastMessage: string | undefined;
   let failure: string | undefined;
+  let outputTokens: number | undefined;
   let malformed = 0;
 
   for (const line of lines) {
@@ -48,6 +49,13 @@ export function parseCodexJsonl(stdout: string): AgentResult {
         failure = failure ?? err?.message ?? "turn failed";
         break;
       }
+      case "turn.completed": {
+        const usage = ev.usage as { output_tokens?: unknown } | undefined;
+        if (typeof usage?.output_tokens === "number" && Number.isFinite(usage.output_tokens)) {
+          outputTokens = usage.output_tokens;
+        }
+        break;
+      }
     }
   }
 
@@ -57,7 +65,7 @@ export function parseCodexJsonl(stdout: string): AgentResult {
     // ("I can't help with that") instead arrives as a normal agent_message and
     // returns ok:true below — an invisible abstention we can't tell from a real
     // answer here. So codex declines are NOT nonzero_exit; refusal is claude-only.
-    return { ok: false, kind: "nonzero_exit", stderr: `codex: ${failure}`, meta: { durationMs: 0 } };
+    return { ok: false, kind: "nonzero_exit", stderr: `codex: ${failure}`, meta: { durationMs: 0, outputTokens } };
   }
   if (lastMessage === undefined) {
     const hint = malformed > 0 ? ` (${malformed} malformed JSONL line(s))` : "";
@@ -65,10 +73,10 @@ export function parseCodexJsonl(stdout: string): AgentResult {
       ok: false,
       kind: "nonzero_exit",
       stderr: `codex produced no agent_message${hint}`,
-      meta: { durationMs: 0 },
+      meta: { durationMs: 0, outputTokens },
     };
   }
-  return { ok: true, text: lastMessage, meta: { durationMs: 0, sessionId: threadId } };
+  return { ok: true, text: lastMessage, meta: { durationMs: 0, sessionId: threadId, outputTokens } };
 }
 
 export type CodexAdapterDeps = {
@@ -118,7 +126,7 @@ export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
     warn(`omw(codex): \`${field}\` (=${String(value)}) is not implemented for codex exec; dropped for this run.`);
   };
 
-  async function run(args: string[], cwd?: string, timeoutMs?: number): Promise<AgentResult> {
+  async function run(args: string[], cwd?: string, timeoutMs?: number, requireOutputTokens?: boolean): Promise<AgentResult> {
     let res: SpawnResult;
     try {
       res = await spawn(args, { cwd, timeoutMs });
@@ -139,7 +147,16 @@ export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
     }
     // JSONL present (even on a non-zero exit, e.g. turn.failed) → let the parser
     // decide ok/fail and surface the reason.
-    return parseCodexJsonl(res.stdout);
+    const parsed = parseCodexJsonl(res.stdout);
+    if (requireOutputTokens && parsed.meta?.outputTokens === undefined) {
+      return {
+        ok: false,
+        kind: "nonzero_exit",
+        stderr: "codex did not report turn.completed.usage.output_tokens; --budget is unsupported for this run",
+        meta: { durationMs: parsed.meta?.durationMs ?? 0 },
+      };
+    }
+    return parsed;
   }
 
   return {
@@ -151,13 +168,13 @@ export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
       if (req.effort !== undefined) warnUnmapped("effort", req.effort);
       if (req.agentType !== undefined) warnUnmapped("agentType", req.agentType);
       args.push(req.prompt);
-      return run(args, req.cwd, req.timeoutMs);
+      return run(args, req.cwd, req.timeoutMs, req.requireOutputTokens);
     },
     // `cwd` must match the original invoke so resume finds the session.
     // (MCP isolation / inheritMcp is not yet implemented for codex.)
     followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
       const args = ["exec", "resume", sessionId, "--json", "-s", sandbox, prompt];
-      return run(args, opts?.cwd, opts?.timeoutMs);
+      return run(args, opts?.cwd, opts?.timeoutMs, opts?.requireOutputTokens);
     },
   };
 }

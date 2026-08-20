@@ -22,6 +22,7 @@ describe("parseCodexJsonl", () => {
     if (!r.ok) throw new Error("expected ok");
     expect(r.text).toBe("pong");
     expect(r.meta.sessionId).toBe("019ecaaf-a620-7e42-b55d-3f1ce4b25c7b");
+    expect(r.meta.outputTokens).toBe(5);
   });
 
   test("turn.failed / error event -> ok:false with the reason surfaced", () => {
@@ -149,6 +150,21 @@ describe("makeCodexAdapter (injected spawn)", () => {
     if (r.ok) throw new Error("expected fail");
     expect(r.kind).toBe("nonzero_exit");
     expect(r.stderr).toContain("boom");
+  });
+
+  test("a budgeted invoke fails explicitly when Codex omits usage", async () => {
+    const adapter = makeCodexAdapter({
+      spawn: async () => ({
+        code: 0,
+        stdout: '{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}',
+        stderr: "",
+      }),
+    });
+    const r = await adapter.invoke({ prompt: "x", requireOutputTokens: true });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected fail");
+    expect(r.stderr).toContain("usage.output_tokens");
+    expect(r.stderr).toContain("--budget");
   });
 
   test("warns once when inheritMcp is requested but not implemented", async () => {

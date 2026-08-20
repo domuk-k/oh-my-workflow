@@ -257,6 +257,7 @@ export function makeRuntime(deps: {
           inheritMcp: opts.inheritMcp,
           effort: opts.effort,
           agentType: opts.agentType,
+          requireOutputTokens: budgetTotal != null,
         });
 
       try {
@@ -292,6 +293,7 @@ export function makeRuntime(deps: {
               cwd: effCwd,
               inheritMcp: opts.inheritMcp,
               timeoutMs: opts.timeoutMs,
+              requireOutputTokens: budgetTotal != null,
             });
             // Resume can fail even when the format hiccup was recoverable (e.g. a
             // killed/expired session). Don't let a broken resume be terminal —

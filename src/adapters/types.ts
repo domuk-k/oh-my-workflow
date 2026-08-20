@@ -52,11 +52,14 @@ export type InvokeRequest = {
   /** Cross-vendor node profile (a named agent persona). Adapters map it where
    *  they can; otherwise drop + warn once (honest-scope). */
   agentType?: string;
+  /** A budgeted run needs an adapter usage receipt. Adapters that can report
+   *  usage must fail explicitly when the receipt is absent. */
+  requireOutputTokens?: boolean;
 };
 
 /** The subset of InvokeRequest a resume turn must mirror from its original
  *  invoke so the repair runs in the same environment and obeys the same bounds. */
-export type FollowUpOpts = Pick<InvokeRequest, "cwd" | "inheritMcp" | "timeoutMs">;
+export type FollowUpOpts = Pick<InvokeRequest, "cwd" | "inheritMcp" | "timeoutMs" | "requireOutputTokens">;
 
 export type AgentPort = {
   name: string;
