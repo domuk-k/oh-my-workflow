@@ -551,6 +551,20 @@ describe("runtime — isolation:'worktree'", () => {
     await rt.agent("b"); // no isolation → caller cwd passes through unchanged
     expect(seenCwd).toEqual(["/tmp/wt-sentinel", undefined]);
   });
+
+  test("worktree setup failures keep the null contract and close the journal span", async () => {
+    const adapter = makeFakeAdapter({ rules: [] });
+    const journal = makeJournal({ now: () => 0 });
+    const failSetup = (async () => {
+      throw new Error("git unavailable");
+    }) as any;
+    const rt = makeRuntime({ adapter, journal, withWorktree: failSetup });
+
+    expect(await rt.agent("a", { isolation: "worktree" })).toBeNull();
+    expect(journal.events().filter((e) => e.ev === "agent_end")).toEqual([
+      expect.objectContaining({ ok: false, kind: "internal_error", error: "git unavailable" }),
+    ]);
+  });
 });
 
 describe("runtime.budget — token accounting", () => {

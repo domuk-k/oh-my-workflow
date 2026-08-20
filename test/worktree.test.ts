@@ -53,4 +53,18 @@ describe("withWorktree", () => {
     expect(captured).toBe(plain); // fell back to running in place
     expect(warns.join("")).toContain("not a git repo");
   });
+
+  test("cleanup failure does not replace a successful node result", async () => {
+    const warns: string[] = [];
+    let call = 0;
+    const spawn = async () => {
+      call += 1;
+      if (call === 1) return { code: 0, stdout: "/repo\n", stderr: "" };
+      if (call === 2) return { code: 0, stdout: "", stderr: "" };
+      throw new Error("status failed");
+    };
+
+    expect(await withWorktree("/repo", async () => "ok", { spawn, warn: (m) => warns.push(m) })).toBe("ok");
+    expect(warns.join("")).toContain("cleanup failed (status failed)");
+  });
 });

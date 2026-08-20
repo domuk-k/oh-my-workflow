@@ -14,12 +14,10 @@ your script instead of pretending a partial run is complete.
 
 ---
 
-## Try it in 30 seconds — no API key
+## Try it without an API key
 
 ```sh
-git clone https://github.com/domuk-k/oh-my-workflow && cd oh-my-workflow
-bun install
-bun src/cli/omw.ts run examples/deep-research --agent fake
+bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake
 ```
 
 ```json
@@ -34,7 +32,7 @@ bun src/cli/omw.ts run examples/deep-research --agent fake --pretty
 
 `--agent fake` needs no network. Swap to `--agent claude` (after `claude login`) or `--agent codex` for real runs.
 
-> On npm: `bunx oh-my-workflow run examples/deep-research --agent fake` — requires **Bun** (not Node `npx`).
+The command fetches the GitHub source through `bunx`; it requires **Bun** (not Node `npx`).
 
 ---
 
@@ -116,6 +114,9 @@ Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` 
 - **Nodes are heavy** — whole agent CLIs, not lightweight function calls. The novel piece is the **schema-gate self-repair loop**.
 - `--budget` counts reported output tokens only. It is not a cost, input-token,
   reasoning-token, or exact concurrent-overshoot cap.
+- At the direct `agent()` boundary, budget exhaustion throws. `parallel()` and
+  `pipeline()` convert a thunk/stage throw to `null`; guard loops with
+  `budget.remaining()` when exhaustion must stop the outer workflow.
 
 ## Why the API looks familiar
 

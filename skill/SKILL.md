@@ -40,10 +40,10 @@ API call (that's LangGraph/Mastra territory; an omw node is a *whole coding
 agent turn*). omw has no sandbox by default — your script is trusted code —
 though you can opt into a determinism sandbox with `--strict`.
 
-## The 30-second free demo (no API key, nothing to clone)
+## No-key demo from GitHub
 
-omw is on npm, so you can run the whole thing in one line — no install step, no
-key, no cost:
+`bunx` fetches and runs the GitHub source in one line — no API key or preinstalled
+`omw` binary required:
 
 ```sh
 bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake

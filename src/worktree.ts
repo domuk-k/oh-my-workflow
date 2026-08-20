@@ -62,11 +62,16 @@ export async function withWorktree<T>(
   } finally {
     // Auto-remove only when the node left the worktree clean; otherwise keep it
     // so the changes aren't silently discarded.
-    const status = await spawn(["status", "--porcelain"], dir);
-    if (status.code === 0 && status.stdout.trim() === "") {
-      await spawn(["worktree", "remove", "--force", dir], repoCwd);
-    } else {
-      warn(`omw(worktree): ${dir} has uncommitted changes; leaving it for inspection.`);
+    try {
+      const status = await spawn(["status", "--porcelain"], dir);
+      if (status.code === 0 && status.stdout.trim() === "") {
+        const remove = await spawn(["worktree", "remove", "--force", dir], repoCwd);
+        if (remove.code !== 0) warn(`omw(worktree): cleanup failed (${remove.stderr.trim()}); leaving ${dir}.`);
+      } else {
+        warn(`omw(worktree): ${dir} has uncommitted changes; leaving it for inspection.`);
+      }
+    } catch (e) {
+      warn(`omw(worktree): cleanup failed (${e instanceof Error ? e.message : String(e)}); leaving ${dir}.`);
     }
   }
 }

@@ -348,7 +348,12 @@ export function makeRuntime(deps: {
       // isolation:'worktree' gives the node its own ephemeral checkout as cwd;
       // otherwise it runs in the caller-provided cwd (or the process cwd).
       if (opts.isolation === "worktree") {
-        return withWorktree(opts.cwd ?? process.cwd(), (wt) => body(wt));
+        try {
+          return await withWorktree(opts.cwd ?? process.cwd(), (wt) => body(wt));
+        } catch (e) {
+          journal.agentEnd({ call, ok: false, kind: "internal_error", error: errMsg(e), durationMs: 0 });
+          return null;
+        }
       }
       return body(opts.cwd);
     });
