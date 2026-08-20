@@ -12,6 +12,7 @@ export type InSessionAdapterOptions = {
   invoke: InSessionInvoke;
   now?: () => number;
   extractText?: (result: unknown) => string | undefined;
+  extractOutputTokens?: (result: unknown) => number | undefined;
   classifyError?: (error: unknown) => AgentFailureKind;
 };
 
@@ -72,6 +73,19 @@ export function extractInSessionText(value: unknown): string | undefined {
   return extractInSessionTextInner(value, 0);
 }
 
+export function extractInSessionOutputTokens(value: unknown, depth = 0): number | undefined {
+  if (depth > 8 || !isRecord(value)) return undefined;
+  for (const key of ["outputTokens", "output_tokens"] as const) {
+    const tokens = value[key];
+    if (typeof tokens === "number" && Number.isFinite(tokens) && tokens >= 0) return tokens;
+  }
+  for (const key of ["usage", "meta", "result", "data"] as const) {
+    const tokens = extractInSessionOutputTokens(value[key], depth + 1);
+    if (tokens !== undefined) return tokens;
+  }
+  return undefined;
+}
+
 function preview(value: unknown): string {
   try {
     return JSON.stringify(value).slice(0, 1000);
@@ -108,7 +122,21 @@ async function runInSession(
 ): Promise<AgentResult> {
   try {
     const result = await opts.invoke(req);
-    if (isAgentResult(result)) return result;
+    if (isAgentResult(result)) {
+      const outputTokens = (opts.extractOutputTokens ?? extractInSessionOutputTokens)(result);
+      if (req.requireOutputTokens && outputTokens === undefined) {
+        return {
+          ok: false,
+          kind: "nonzero_exit",
+          stderr: "in-session host did not report output tokens; --budget is unsupported for this run",
+          meta: { durationMs: duration(start) },
+        };
+      }
+      if (outputTokens === undefined || result.meta?.outputTokens !== undefined) return result;
+      return result.ok
+        ? { ...result, meta: { ...result.meta, outputTokens } }
+        : { ...result, meta: { durationMs: result.meta?.durationMs ?? duration(start), ...result.meta, outputTokens } };
+    }
 
     const text = extractText(result)?.trim();
     if (!text) {
@@ -120,7 +148,16 @@ async function runInSession(
       };
     }
     const sessionId = extractSessionId(result);
-    return { ok: true, text, meta: { durationMs: duration(start), sessionId } };
+    const outputTokens = (opts.extractOutputTokens ?? extractInSessionOutputTokens)(result);
+    if (req.requireOutputTokens && outputTokens === undefined) {
+      return {
+        ok: false,
+        kind: "nonzero_exit",
+        stderr: "in-session host did not report output tokens; --budget is unsupported for this run",
+        meta: { durationMs: duration(start) },
+      };
+    }
+    return { ok: true, text, meta: { durationMs: duration(start), sessionId, outputTokens } };
   } catch (e) {
     return {
       ok: false,
@@ -152,6 +189,8 @@ export function makeInSessionAdapter(opts: InSessionAdapterOptions): AgentPort {
           cwd: followOpts?.cwd,
           inheritMcp: followOpts?.inheritMcp,
           timeoutMs: followOpts?.timeoutMs,
+          requireOutputTokens: followOpts?.requireOutputTokens,
+          model: followOpts?.model,
         },
         now(),
         duration,

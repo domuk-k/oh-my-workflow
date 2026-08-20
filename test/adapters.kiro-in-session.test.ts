@@ -91,6 +91,14 @@ describe("makeKiroInSessionAdapter", () => {
     }
   });
 
+  test("budgeted calls fail closed without a usage receipt", async () => {
+    const adapter = makeKiroInSessionAdapter({ tool: async () => ({ summary: "done" }) });
+    const result = await adapter.invoke({ prompt: "hello", requireOutputTokens: true });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.stderr).toContain("--budget is unsupported");
+  });
+
   test("maps host errors to adapter failures", async () => {
     const adapter = makeKiroInSessionAdapter({
       tool: async () => {

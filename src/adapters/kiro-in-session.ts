@@ -1,5 +1,5 @@
 import type { AgentPort, AgentResult, FollowUpOpts, InvokeRequest } from "./types";
-import type { InSessionRequest } from "./in-session";
+import { extractInSessionOutputTokens, type InSessionRequest } from "./in-session";
 
 export type KiroSubagentConfig = {
   query: string;
@@ -28,6 +28,7 @@ export type KiroInSessionAdapterOptions = {
   relevantContext?: string | ((req: InvokeRequest) => string | undefined);
   now?: () => number;
   extractText?: (result: unknown) => string | undefined;
+  extractOutputTokens?: (result: unknown) => number | undefined;
 };
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -189,6 +190,7 @@ async function runKiroNode(
   start: number,
   duration: (s: number) => number,
   extractText: (value: unknown) => string | undefined,
+  extractOutputTokens: (value: unknown) => number | undefined,
 ): Promise<AgentResult> {
   try {
     const kiroReq = buildKiroSubagentRequest(req, opts);
@@ -203,7 +205,16 @@ async function runKiroNode(
       };
     }
     const sessionId = extractKiroSessionId(result) ?? req.sessionId;
-    return { ok: true, text, meta: { durationMs: duration(start), sessionId } };
+    const outputTokens = extractOutputTokens(result);
+    if (req.requireOutputTokens && outputTokens === undefined) {
+      return {
+        ok: false,
+        kind: "nonzero_exit",
+        stderr: "Kiro subagent did not report output tokens; --budget is unsupported for this run",
+        meta: { durationMs: duration(start) },
+      };
+    }
+    return { ok: true, text, meta: { durationMs: duration(start), sessionId, outputTokens } };
   } catch (e) {
     return {
       ok: false,
@@ -217,6 +228,7 @@ async function runKiroNode(
 export function makeKiroInSessionAdapter(opts: KiroInSessionAdapterOptions = {}): AgentPort {
   const now = opts.now ?? (() => Date.now());
   const extractText = opts.extractText ?? extractKiroSubagentText;
+  const extractOutputTokens = opts.extractOutputTokens ?? extractInSessionOutputTokens;
 
   const duration = (start: number): number => Math.max(0, now() - start);
 
@@ -238,7 +250,7 @@ export function makeKiroInSessionAdapter(opts: KiroInSessionAdapterOptions = {})
           meta: { durationMs: duration(start) },
         };
       }
-      return runKiroNode(req, opts, tool, start, duration, extractText);
+      return runKiroNode(req, opts, tool, start, duration, extractText, extractOutputTokens);
     },
     async followUp(sessionId: string, prompt: string, followOpts?: FollowUpOpts): Promise<AgentResult> {
       const start = now();
@@ -258,12 +270,15 @@ export function makeKiroInSessionAdapter(opts: KiroInSessionAdapterOptions = {})
           cwd: followOpts?.cwd,
           inheritMcp: followOpts?.inheritMcp,
           timeoutMs: followOpts?.timeoutMs,
+          requireOutputTokens: followOpts?.requireOutputTokens,
+          model: followOpts?.model,
         },
         opts,
         tool,
         start,
         duration,
         extractText,
+        extractOutputTokens,
       );
     },
   };

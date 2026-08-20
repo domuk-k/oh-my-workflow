@@ -384,6 +384,22 @@ describe("runtime.agent — resume keys on semantic opts only", () => {
     await rt2.agent("compute", { model: "m2" }); // different model → miss
     expect(a2.calls()).toBe(1);
   });
+
+  test("tighter timeout or retry bounds bust the cache", async () => {
+    for (const [first, second] of [
+      [{ timeoutMs: 2000 }, { timeoutMs: 1000 }],
+      [{ maxRetries: 2 }, { maxRetries: 0 }],
+    ] as const) {
+      const j1 = makeJournal({ now: () => 0 });
+      await makeRuntime({ adapter: countingAdapter(), journal: j1 }).agent("compute", first);
+      const live = countingAdapter();
+      await makeRuntime({ adapter: live, journal: makeJournal({ now: () => 0 }), resume: makeResumeIndex(j1.events()) }).agent(
+        "compute",
+        second,
+      );
+      expect(live.calls()).toBe(1);
+    }
+  });
 });
 
 describe("runtime.agent — resume partial-failure recompute", () => {

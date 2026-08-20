@@ -21,7 +21,7 @@
     "twinSub": "The vocabulary resembles host-native workflow tools; omw runs whole external CLI processes and does not claim host-level parity.",
     "twinNativeLabel": "native dynamic Workflow — inside Claude Code",
     "twinOpenLabel": "omw — external CLI nodes",
-    "diffLegend": "<mark class=\"ins\">marked</mark> = the only two spots that change.",
+    "diffLegend": "<mark class=\"ins\">marked</mark> = omw-specific decisions shown in this small example.",
     "honestHeading": "Honest about the trade-off",
     "honestNote": "✱ note",
     "honestTitle": "This is slower and pricier than a raw-API orchestrator — on purpose.",

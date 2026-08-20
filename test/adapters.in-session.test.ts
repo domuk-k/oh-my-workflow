@@ -48,6 +48,35 @@ describe("makeInSessionAdapter", () => {
     });
   });
 
+  test("budgeted calls require and preserve an output-token receipt", async () => {
+    const missing = makeInSessionAdapter({ invoke: async () => ({ summary: "done" }) });
+    const rejected = await missing.invoke({ prompt: "hello", requireOutputTokens: true });
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) expect(rejected.stderr).toContain("--budget is unsupported");
+
+    const metered = makeInSessionAdapter({
+      invoke: async () => ({ summary: "done", usage: { output_tokens: 12 } }),
+    });
+    expect(await metered.invoke({ prompt: "hello", requireOutputTokens: true })).toEqual({
+      ok: true,
+      text: "done",
+      meta: { durationMs: expect.any(Number), sessionId: undefined, outputTokens: 12 },
+    });
+  });
+
+  test("followUp preserves budget and model options", async () => {
+    let captured: any;
+    const adapter = makeInSessionAdapter({
+      invoke: async (req) => {
+        captured = req;
+        return { summary: "done", outputTokens: 1 };
+      },
+    });
+
+    await adapter.followUp!("s-1", "repair", { model: "m", requireOutputTokens: true });
+    expect(captured).toMatchObject({ sessionId: "s-1", model: "m", requireOutputTokens: true });
+  });
+
   test("fails clearly when the host returns no text", async () => {
     const adapter = makeInSessionAdapter({ invoke: async () => ({ empty: true }), now: () => 0 });
     const result = await adapter.invoke({ prompt: "hello" });

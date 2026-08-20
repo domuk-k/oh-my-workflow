@@ -7,6 +7,7 @@ const root = process.cwd();
 const landing = join(root, "dist", "docs", "index.html");
 const docsPage = join(root, "dist", "docs", "docs", "index.html");
 const skill = join(root, "skill", "SKILL.md");
+const landingSource = join(root, "site", "src", "components", "Landing.astro");
 
 const checks: Check[] = [];
 const add = (name: string, ok: boolean, detail?: string) => checks.push({ name, ok, detail });
@@ -17,6 +18,7 @@ add("skill exists", existsSync(skill), skill);
 
 const html = [landing, docsPage].filter(existsSync).map((p) => readFileSync(p, "utf8")).join("\n");
 const skillText = existsSync(skill) ? readFileSync(skill, "utf8") : "";
+const landingText = existsSync(landingSource) ? readFileSync(landingSource, "utf8") : "";
 
 for (const phrase of [
   "oh-my-workflow",
@@ -32,6 +34,10 @@ add("docs page has quickstart section", html.includes('id="quickstart"'));
 add("site has no placeholder words", !/\b(TODO|TBD|lorem|placeholder)\b/i.test(html));
 add("skill frontmatter exposes /omw", /^name:\s*omw\s*$/m.test(skillText));
 add("skill teaches headless adapters", /--agent (auto|fake|claude)/.test(skillText));
+add(
+  "landing uses workflow args as the second parameter",
+  landingText.includes('{"}"}<mark class="ins">, args</mark>)') && !landingText.includes("parallel, args"),
+);
 
 const failed = checks.filter((c) => !c.ok);
 for (const c of checks) {

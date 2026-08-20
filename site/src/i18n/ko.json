@@ -21,7 +21,7 @@
     "twinSub": "host-native workflow와 어휘는 비슷하지만, omw는 외부 CLI 프로세스를 실행하며 host 수준 동등성을 주장하지 않습니다.",
     "twinNativeLabel": "native dynamic Workflow — Claude Code 안",
     "twinOpenLabel": "omw — 외부 CLI 노드",
-    "diffLegend": "<mark class=\"ins\">표시</mark> = 달라지는 건 이 두 군데뿐.",
+    "diffLegend": "<mark class=\"ins\">표시</mark> = 이 작은 예제에서 드러나는 omw 고유 선택입니다.",
     "honestHeading": "트레이드오프에 정직하게",
     "honestNote": "✱ 노트",
     "honestTitle": "raw-API 오케스트레이터보다 느리고 비쌉니다 — 의도된 선택입니다.",

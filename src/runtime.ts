@@ -96,9 +96,9 @@ export function makeLimiter(max: number) {
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /** The semantic subset of a node's options — everything that changes WHAT the
- *  node computes, and nothing cosmetic. The resume key hashes only this, so a
- *  display-only change (label/phase) or a retry-policy tweak (timeoutMs/
- *  maxRetries) re-uses the cached result instead of needlessly re-running. The
+ *  node computes or the bounds under which it may complete, and nothing cosmetic.
+ *  The resume key hashes only this, so a display-only change (label/phase)
+ *  re-uses the cached result instead of needlessly re-running. The
  *  resolved model (after the opts>phase>meta chain) is passed in so a meta/phase
  *  model change still busts the cache even when opts.model is unset. */
 function pickSemantic(opts: AgentOpts, model: string | undefined) {
@@ -110,6 +110,8 @@ function pickSemantic(opts: AgentOpts, model: string | undefined) {
     agentType: opts.agentType,
     cwd: opts.cwd,
     inheritMcp: opts.inheritMcp,
+    timeoutMs: opts.timeoutMs,
+    maxRetries: opts.maxRetries,
   };
 }
 
