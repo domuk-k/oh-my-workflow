@@ -9,6 +9,11 @@ All notable changes to this project are documented here. This project adheres to
 
 - Codex `turn.completed.usage.output_tokens` now reaches runtime accounting.
   Budgeted Codex nodes fail explicitly when the CLI omits that usage receipt.
+- `--strict` now preserves the runtime's own journal clock while still rejecting
+  workflow calls to `Date.now()`.
+- Nested workflows share the run-wide concurrency limiter.
+- Bare JSON arrays are extractable by the schema gate, and a workflow returning
+  no JSON-serializable artifact now exits non-zero.
 
 ### Changed (breaking)
 

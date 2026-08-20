@@ -423,6 +423,37 @@ describe("runWorkflow — authoring surface", () => {
     expect(out.exitCode).toBe(1);
     expect((out.error as any).message).toContain("one level");
   });
+
+  test("nested workflows share the run-wide concurrency limit", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const adapter = {
+      name: "counting",
+      invoke: async () => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active--;
+        return { ok: true as const, text: "ok", meta: { durationMs: 5 } };
+      },
+    };
+    const child = { workflow: async ({ agent }: any) => agent("check") };
+    const parent = {
+      workflow: async ({ parallel, workflow }: any) => parallel([() => workflow("child"), () => workflow("child")]),
+    };
+    const out = await runWorkflow(
+      { wfPath: "parent", agent: "counting", args: null, pretty: false, concurrency: 1 },
+      {
+        loadWorkflow: async (path) => (path === "parent" ? parent : child) as any,
+        resolveAdapter: () => ({ adapter }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+      },
+    );
+    expect(out.exitCode).toBe(0);
+    expect(maxActive).toBe(1);
+  });
 });
 
 describe("runWorkflow — --budget halts a loop", () => {
@@ -479,6 +510,37 @@ describe("runWorkflow — --strict determinism sandbox", () => {
 
     const looseOut = await mk(false);
     expect(looseOut.exitCode).toBe(0);
+  });
+
+  test("runCommand keeps journal timestamps working during a strict agent call", async () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const code = await runCommand(
+      ["examples/deep-research", "--agent", "fake", "--strict"],
+      {
+        stdout: (value) => stdout.push(value),
+        stderr: (value) => stderr.push(value),
+        omwDir: mkdtempSync(join(tmpdir(), "omw-strict-")),
+      },
+    );
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout.join(""))).toHaveProperty("confirmed");
+    expect(stderr.join("")).not.toContain("Date.now");
+  });
+
+  test("a workflow that returns undefined fails instead of exiting green without an artifact", async () => {
+    const out = await runWorkflow(
+      { wfPath: "w", agent: "fake", args: null, pretty: false },
+      {
+        loadWorkflow: async () => ({ workflow: async () => undefined }),
+        resolveAdapter: () => ({ adapter: makeFakeAdapter() }),
+        journalSink: () => {},
+        now: () => 0,
+        runId: () => "t",
+      },
+    );
+    expect(out.exitCode).toBe(1);
+    expect((out.error as any).message).toContain("JSON-serializable result");
   });
 
   test("concurrent --strict runs do not corrupt the global Date after both finish (reentrancy)", async () => {

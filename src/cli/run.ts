@@ -12,7 +12,7 @@ import { makeClaudeAdapter } from "../adapters/claude";
 import { makeCodexAdapter } from "../adapters/codex";
 import { makeHermesAdapter } from "../adapters/hermes";
 import type { Runtime, WorkflowMeta } from "../runtime";
-import { makeRuntime } from "../runtime";
+import { makeLimiter, makeRuntime } from "../runtime";
 import { makeJournal, parseJournalLines, type JournalEvent } from "../journal";
 import type { ResumeIndex } from "../resume";
 import { makeResumeIndexFromLines } from "../resume";
@@ -314,6 +314,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
   // One spend accumulator for the whole run: parent + any nested workflow()
   // child point at it, so the token pool is shared (matches native).
   const budgetState = { spent: 0 };
+  const limiter = makeLimiter(opts.concurrency ?? 4);
   const rt = makeRuntime({
     adapter: resolved.adapter,
     journal,
@@ -322,6 +323,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
     strictResume: opts.strictResume,
     budget: opts.budget,
     budgetState,
+    limiter,
     meta: loaded.meta,
   });
 
@@ -344,6 +346,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
         strictResume: opts.strictResume,
         budget: opts.budget,
         budgetState,
+        limiter,
         meta: childLoaded.meta,
       });
       const childHooks = { ...childRt, workflow: makeWorkflowHook(depth + 1) };
@@ -356,6 +359,8 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
     // loader + resolved adapter.
     const hooks = { ...rt, workflow: makeWorkflowHook(0) };
     const result = await withStrict(opts.strict, () => loaded.workflow(hooks, opts.args));
+    const stdout = JSON.stringify(result);
+    if (stdout === undefined) throw new Error("workflow returned no JSON-serializable result");
     // internal_error is an AUTHOR bug (e.g. a JSON Schema that won't compile),
     // not a flaky node — the null-contract absorbs it so the run completes, but
     // we escalate to exit 4 so a caller (or authoring agent) doesn't read the
@@ -368,7 +373,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
     if (internalErrors.length > 0) {
       return {
         exitCode: 4,
-        stdout: JSON.stringify(result),
+        stdout,
         error: {
           error: "internal_error_nodes",
           calls: internalErrors,
@@ -376,7 +381,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
         },
       };
     }
-    return { exitCode: 0, stdout: JSON.stringify(result) };
+    return { exitCode: 0, stdout };
   } catch (e) {
     // A throw escaping the workflow body is a SCRIPT error (the authored JS), not
     // a node failure — node failures are swallowed by the null-contract. Exit 1.
@@ -491,7 +496,8 @@ export type Io = {
   runId?: () => string;
 };
 
-const defaultRunId = (): string => `r-${Date.now().toString(36)}-${process.pid.toString(36)}-${randomUUID().slice(0, 8)}`;
+const wallClockNow = Date.now.bind(Date);
+const defaultRunId = (): string => `r-${wallClockNow().toString(36)}-${process.pid.toString(36)}-${randomUUID().slice(0, 8)}`;
 
 /** Wire real fs/import deps and run. Returns the exit code; writes the result
  *  JSON to stdout, the journal to <omwDir>/<runId>.jsonl, and any error JSON to
@@ -547,7 +553,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
       if (events.length === 1) mkdirSync(omwDir, { recursive: true });
       appendFileSync(journalPath, line + "\n");
     },
-    now: () => Date.now(),
+    now: wallClockNow,
     runId: () => runId,
     resume,
     stderr: io.stderr,

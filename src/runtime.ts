@@ -150,6 +150,8 @@ export function makeRuntime(deps: {
   adapter: AgentPort;
   journal: Journal;
   concurrency?: number;
+  /** Shared run-wide limiter. Nested workflows pass the parent's instance. */
+  limiter?: ReturnType<typeof makeLimiter>;
   /** A prior run's journal as a lookup. When a node's (call, promptHash,
    *  optsHash) key hits, the adapter is skipped and the cached result returned —
    *  the longest-unchanged-prefix resume model. A miss (incl. a prior failure)
@@ -173,7 +175,7 @@ export function makeRuntime(deps: {
 }): Runtime {
   const { adapter, journal, resume } = deps;
   const withWorktree = deps.withWorktree ?? defaultWithWorktree;
-  const limit = makeLimiter(deps.concurrency ?? 4);
+  const limit = deps.limiter ?? makeLimiter(deps.concurrency ?? 4);
   let callCounter = 0;
   let strictResumeMissAt: number | null = null;
   let currentPhase: string | undefined;

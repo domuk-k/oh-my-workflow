@@ -1,9 +1,9 @@
 // The schema gate turns probabilistic node output into a validated object — or
 // null. Extraction MUST be deterministic so the same text always yields the same
 // result (the journal/resume model depends on it). Precedence:
-//   1. the LAST fenced code block that parses as JSON, else
-//   2. the LARGEST balanced-brace span that parses as JSON, else
-//   3. undefined.
+//   1. the whole trimmed output when it is JSON, else
+//   2. the LAST fenced code block that parses as JSON, else
+//   3. the LARGEST balanced-brace span that parses as JSON, else undefined.
 
 import Ajv from "ajv";
 import type { AgentResult, AgentFailureKind } from "./adapters/types";
@@ -55,7 +55,10 @@ function balancedBraceSpans(text: string): string[] {
 }
 
 export function extractJson(text: string): unknown | undefined {
-  // 1) Fenced code blocks — last parseable wins.
+  // A bare array or primitive has no balanced braces, so try the whole output first.
+  const whole = tryParse(text);
+  if (whole !== undefined) return whole;
+  // Fenced code blocks — last parseable wins.
   const fences = [...text.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map((m) => m[1] ?? "");
   for (let i = fences.length - 1; i >= 0; i--) {
     const parsed = tryParse(fences[i] ?? "");

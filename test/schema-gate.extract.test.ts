@@ -6,6 +6,10 @@ describe("extractJson — deterministic precedence", () => {
     expect(extractJson('{"a":1,"b":"x"}')).toEqual({ a: 1, b: "x" });
   });
 
+  test("parses a bare JSON array", () => {
+    expect(extractJson('[1, 2, {"ok":true}]')).toEqual([1, 2, { ok: true }]);
+  });
+
   test("extracts JSON from a ```json fenced block", () => {
     const text = 'Here is the result:\n```json\n{"ok": true}\n```\n';
     expect(extractJson(text)).toEqual({ ok: true });
