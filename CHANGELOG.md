@@ -31,6 +31,8 @@ All notable changes to this project are documented here. This project adheres to
   create an isolated checkout.
 - Schema repair preserves the selected model and Codex sandbox policy. CLI
   subprocess timeouts escalate from terminate to forced kill after a short grace.
+- The CLI sets `process.exitCode` instead of forcing immediate exit, so large or
+  piped JSON artifacts flush completely.
 
 ### Changed (breaking)
 

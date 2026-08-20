@@ -43,4 +43,6 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-main(process.argv.slice(2)).then((code) => process.exit(code));
+main(process.argv.slice(2)).then((code) => {
+  process.exitCode = code;
+});
