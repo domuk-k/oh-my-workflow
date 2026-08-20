@@ -32,8 +32,9 @@ benefits from structure you'd otherwise hand-roll:
 - **Budget-bounded loop**: keep working until a reported output-token ceiling is reached.
 
 You want: bounded concurrency, schema-validated node output with automatic
-node-level retry, a replayable journal, and a `null`-on-failure contract so one
-bad node never crashes the run.
+node-level retry, a replayable journal, and a `null` result for ordinary node
+failures. Script errors, invalid runtime configuration, and exhausted budgets
+remain explicit run failures.
 
 **Don't** use omw for a single agent call, or where a node is a single raw LLM
 API call (that's LangGraph/Mastra territory; an omw node is a *whole coding
@@ -63,9 +64,11 @@ bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake --pre
 ```
 
 `--agent fake` is a built-in, deterministic adapter — it's the no-key demo engine
-and the test double. For real work, write the workflow and run `omw run <file>`;
-the CLI defaults to `--agent auto`, choosing the current/installed coding-agent
-CLI. Set `OMW_AGENT=claude|codex|hermes` only when you need to pin it.
+and the test double. For real work, write the workflow and run it with an installed
+`omw` binary. If none is installed, use
+`bunx github:domuk-k/oh-my-workflow run <file>` instead. The CLI defaults to
+`--agent auto`, choosing the current/installed coding-agent CLI. Set
+`OMW_AGENT=claude|codex|hermes` only when you need to pin it.
 
 > **Reading this as a skill?** You already have it. To install/update it for a
 > coding agent: `bunx github:domuk-k/oh-my-workflow skill install` (→ `~/.claude/skills/`;
@@ -587,10 +590,9 @@ a first/best/moat claim. Where it lands honestly:
 | Claude Code Workflow | the model, on the fly | sealed sandbox | a subagent (one in-harness agent) | no (Claude only) |
 | **oh-my-workflow** | **the model, on the fly (taught by this skill)** | **external** | **a whole coding-agent CLI** | **yes (claude/codex/…)** |
 
-No single shipped project does all three of *(a) host-agent-authored on the fly +
-(b) executed externally via reusable agent CLIs + (c) agent-agnostic*. omw is the
-reference implementation of that **2-of-3 intersection** — plus the schema-gate
-self-repair loop, which is the one piece a "subprocess + for-loop" doesn't have.
+The useful combination here is model-authored plain JS, reusable external
+coding-agent CLIs, and schema-gated repair. The table describes the intended
+boundary; it is not a market-uniqueness claim.
 
 ### Resemblance ledger (vs the CC dynamic-workflow surface)
 

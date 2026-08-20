@@ -26,6 +26,18 @@ const numSchema = {
 };
 
 describe("runtime.agent — schema + null-contract", () => {
+  test("invalid maxRetries becomes an explicit internal error without invoking the adapter", async () => {
+    const adapter = countingAdapter();
+    const journal = makeJournal({ now: () => 0 });
+    const rt = makeRuntime({ adapter, journal });
+
+    expect(await rt.agent("x", { schema: numSchema, maxRetries: -1 })).toBeNull();
+    expect(adapter.calls()).toBe(0);
+    expect(journal.events()).toContainEqual(
+      expect.objectContaining({ ev: "agent_end", ok: false, kind: "internal_error" }),
+    );
+  });
+
   test("returns the validated value and journals start+end(ok)", async () => {
     const journal = makeJournal({ now: () => 0 });
     const adapter = makeFakeAdapter({ rules: [{ match: () => true, responses: [{ text: '{"n":5}' }] }] });
@@ -285,6 +297,16 @@ describe("runtime.parallel / pipeline", () => {
 });
 
 describe("runtime concurrency limiter", () => {
+  test("rejects a non-positive concurrency instead of queueing forever", () => {
+    expect(() =>
+      makeRuntime({
+        adapter: makeFakeAdapter({ rules: [] }),
+        journal: makeJournal({ now: () => 0 }),
+        concurrency: 0,
+      }),
+    ).toThrow("concurrency must be a positive integer");
+  });
+
   test("never exceeds the configured concurrency (default 4)", async () => {
     let active = 0;
     let max = 0;

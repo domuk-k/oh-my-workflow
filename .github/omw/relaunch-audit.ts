@@ -97,6 +97,7 @@ export default async function relaunchAudit({ agent, parallel, phase }: Runtime,
   phase("Synthesize");
   const report = await agent(
     `Synthesize this fixed-coverage audit into the narrowest credible product position. Do not add facts not present in the analyses. ` +
+      `Do not attribute a capability found only in an external-source analysis to the reviewed repository runtime. ` +
       `Return exactly one JSON object with only positioning (string), strengths (string[]), risks (string[]), recommendations (string[]).\n${JSON.stringify(analyses)}`,
     { schema: reportSchema, label: "synthesis", cwd: repoRoot, timeoutMs: 180_000, maxRetries: 0 },
   );
@@ -109,6 +110,9 @@ export default async function relaunchAudit({ agent, parallel, phase }: Runtime,
     { schema: checkSchema, label: "crosscheck", cwd: repoRoot, timeoutMs: 180_000, maxRetries: 0 },
   );
   if (!crosscheck) throw new Error("cross-check failed");
+  if (!(crosscheck as { accepted: boolean }).accepted) {
+    throw new Error(`cross-check rejected the report: ${(crosscheck as { issues: string[] }).issues.join("; ")}`);
+  }
 
   return { expected, analyses, report, crosscheck };
 }

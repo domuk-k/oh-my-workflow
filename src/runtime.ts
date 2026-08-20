@@ -73,6 +73,7 @@ export type Runtime = {
  *  caller could slip past the `active >= max` check between the wake and the
  *  woken waiter resuming, pushing in-flight above `max` (a TOCTOU race). */
 export function makeLimiter(max: number) {
+  if (!Number.isInteger(max) || max < 1) throw new RangeError(`concurrency must be a positive integer, got: ${max}`);
   let active = 0;
   const waiters: Array<() => void> = [];
   return async function run<T>(fn: () => Promise<T>): Promise<T> {
@@ -209,6 +210,17 @@ export function makeRuntime(deps: {
       promptHash: pHash,
       optsHash: oHash,
     });
+
+    if (opts.maxRetries !== undefined && (!Number.isInteger(opts.maxRetries) || opts.maxRetries < 0)) {
+      journal.agentEnd({
+        call,
+        ok: false,
+        kind: "internal_error",
+        error: `maxRetries must be a non-negative integer, got: ${opts.maxRetries}`,
+        durationMs: 0,
+      });
+      return null;
+    }
 
     // Resume short-circuit: a hit skips the limiter + adapter entirely, but still
     // emits agent_end so every start has a matching end (the spine invariant).

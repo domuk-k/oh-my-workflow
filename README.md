@@ -27,7 +27,7 @@ bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake
 Fan-out, schema self-repair, timeout handling — one pass, deterministic:
 
 ```sh
-bun src/cli/omw.ts run examples/deep-research --agent fake --pretty
+bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake --pretty
 ```
 
 `--agent fake` needs no network. Swap to `--agent claude` (after `claude login`) or `--agent codex` for real runs.
@@ -72,7 +72,7 @@ export default async function ({ agent, parallel, phase, budget }, args) {
 | `budget` | Reported output-token ceiling via `--budget N`. |
 | `phase(title)` / `log(msg)` | Journal / `--pretty` side-channel. |
 
-Every step lands in `.omw/<runId>.jsonl`. On failure, read `kind` (`timeout`, `schema_violation`, `nonzero_exit`, …) and fix the script.
+Every agent attempt lands in `.omw/<runId>.jsonl`. On failure, read `kind` (`timeout`, `schema_violation`, `nonzero_exit`, …) and fix the script.
 
 **Optional authoring skill:** [`skill/SKILL.md`](skill/SKILL.md) teaches a coding
 agent to author, run, and repair these workflows.
@@ -91,7 +91,9 @@ npx skills add domuk-k/oh-my-workflow --skill omw
 bun src/cli/omw.ts skill install --codex
 ```
 
-Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` and runs `omw run`.
+This installs the authoring skill, not the runtime binary. Then: *"use
+oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` and runs it through
+an installed `omw` binary or the same `bunx github:domuk-k/oh-my-workflow` prefix.
 
 ---
 
@@ -111,7 +113,7 @@ Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` 
 - JSON Schema validates output shape, not factual correctness or source truth.
 - **"Deterministic"** = engine guarantees + `--agent fake`. Your script stays conventional unless you pass `--strict`.
 - **Resume** = per-node semantic cache keys; filesystem side-channels need care — use `--strict-resume` when nodes pass state via the filesystem.
-- **Nodes are heavy** — whole agent CLIs, not lightweight function calls. The novel piece is the **schema-gate self-repair loop**.
+- **Nodes are heavy** — whole agent CLIs, not lightweight function calls. The **schema-gate self-repair loop** is the main differentiator.
 - `--budget` counts reported output tokens only. It is not a cost, input-token,
   reasoning-token, or exact concurrent-overshoot cap.
 - At the direct `agent()` boundary, budget exhaustion throws. `parallel()` and

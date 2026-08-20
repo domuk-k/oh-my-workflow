@@ -16,6 +16,10 @@ All notable changes to this project are documented here. This project adheres to
 - Nested workflows share the run-wide concurrency limiter.
 - Bare JSON arrays are extractable by the schema gate, and a workflow returning
   no JSON-serializable artifact now exits non-zero.
+- Invalid runtime concurrency fails fast instead of deadlocking; invalid
+  `maxRetries` becomes an explicit internal-error receipt without invoking an agent.
+- Worktree setup failures stay inside the node null-contract, and cleanup errors
+  no longer replace a successful node result.
 
 ### Changed (breaking)
 
@@ -115,8 +119,8 @@ same authoring shape and vocabulary, external coding-agent CLI nodes, no magic.
 - **`hermes` adapter** (experimental) — `--agent hermes` runs nodes via
   `hermes -z <prompt> --yolo` (one-shot; stdout is the response). No in-session
   followUp (schema retries go fresh).
-- **`conformance/` now ships in the package**, plus a `scripts/smoke-live.sh`
-  harness and a cross-host authoring runbook for testing adapters / host-authoring.
+- **`conformance/` now ships in the package**. The repository also includes a
+  `scripts/smoke-live.sh` harness and cross-host authoring runbook.
 
 ### Fixed
 
