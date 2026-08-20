@@ -39,7 +39,7 @@ const checkSchema = {
 };
 
 type Source = { id: string; inputFile: string; bytes: number; sha256: string; canonicalUrl: string };
-type Args = { repoRoot?: string; sourceRoot?: string; mode?: "ci" };
+type Args = { repoRoot?: string; sourceRoot?: string; head?: string; mode?: "ci" };
 
 const repoChecks = ["runtime-contract", "onboarding-claims", "release-surface"];
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -55,6 +55,8 @@ function assertCoverage(results: unknown[], expected: string[]) {
 
 export default async function relaunchAudit({ agent, parallel, phase }: Runtime, args: Args = {}) {
   const repoRoot = resolve(args.repoRoot ?? process.cwd());
+  const head = args.head ?? (args.mode === "ci" ? "ci-fixture" : null);
+  if (!head) throw new Error("head is required outside CI fixture mode");
   const manifestPath = join(repoRoot, "evidence/2026-08-20-relaunch/source-manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { sources: Source[] };
   const sources = manifest.sources;
@@ -82,10 +84,10 @@ export default async function relaunchAudit({ agent, parallel, phase }: Runtime,
   );
   const repoCalls = repoChecks.map((id) => () =>
     agent(
-      `READ-ONLY REPO CHECK ${id}. Inspect ${repoRoot}. Evaluate only this facet: ${id}. ` +
+      `READ-ONLY REPO CHECK ${id}. Inspect exact candidate HEAD ${head} at ${repoRoot}. Evaluate only this facet: ${id}. ` +
         `Find concrete strengths, overclaims, and release blockers for the narrow job. Return exactly one JSON object with only these top-level keys: ` +
         `id, strengths, risks, evidence. id must be ${id}; the other three values must be arrays of strings. Evidence must name repo paths or commands.`,
-      { schema: analysisSchema, label: id, cwd: repoRoot, timeoutMs: 180_000, maxRetries: 0 },
+      { schema: analysisSchema, label: id, cwd: repoRoot, timeoutMs: 300_000, maxRetries: 0 },
     ),
   );
   const analyses = await parallel([...sourceCalls, ...repoCalls]);
