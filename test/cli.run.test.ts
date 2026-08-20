@@ -578,6 +578,46 @@ describe("runWorkflow — --strict determinism sandbox", () => {
     }
   });
 
+  test("a non-strict run waits for an active strict run instead of seeing patched globals", async () => {
+    let entered!: () => void;
+    let release!: () => void;
+    const strictEntered = new Promise<void>((resolve) => (entered = resolve));
+    const strictRelease = new Promise<void>((resolve) => (release = resolve));
+    const deps = (workflow: (...args: any[]) => Promise<unknown>) => ({
+      loadWorkflow: async () => ({ workflow, fake: { default: { text: "ok" as const } } }) as any,
+      resolveAdapter: (_n: string, wf: any) => ({ adapter: makeFakeAdapter(wf.fake) }),
+      journalSink: () => {},
+      now: () => 0,
+      runId: () => "t",
+    });
+
+    const strictRun = runWorkflow(
+      { wfPath: "strict", agent: "fake", args: undefined, pretty: false, strict: true } as any,
+      deps(async () => {
+        entered();
+        await strictRelease;
+        return { ok: true };
+      }),
+    );
+    await strictEntered;
+
+    let looseFinished = false;
+    const looseRun = runWorkflow(
+      { wfPath: "loose", agent: "fake", args: undefined, pretty: false, strict: false } as any,
+      deps(async () => ({ now: Date.now() })),
+    ).then((out) => {
+      looseFinished = true;
+      return out;
+    });
+    await Promise.resolve();
+    expect(looseFinished).toBe(false);
+    release();
+
+    const [strictOut, looseOut] = await Promise.all([strictRun, looseRun]);
+    expect(strictOut.exitCode).toBe(0);
+    expect(looseOut.exitCode).toBe(0);
+  });
+
   test("withStrict restores globals even when patching partially fails mid-setup", async () => {
     const REAL_DATE = globalThis.Date;
     const REAL_RANDOM = Math.random;

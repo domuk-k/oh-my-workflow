@@ -225,60 +225,91 @@ function isLegacyShape(fn: Function): boolean {
  *  for wall-clock or randomness, which would make a journal non-reproducible.
  *  Scoped to the invoke and restored in finally — the engine's injected clock is
  *  untouched, so journaling/resume still work. Mirrors native's freeze-throw. */
-// Reentrancy state for withStrict. The patch touches PROCESS-GLOBAL Date/
-// Math.random, so overlapping strict runs (nested workflow() or concurrent
-// runWorkflow callers in one process) must share a SINGLE install and restore
-// only when the last one unwinds. A naive per-call save/restore races: a second
-// caller would snapshot the already-patched StrictDate as its "original" and
-// restore it back, leaving the throwing clock installed forever. Depth-counting
-// with the true original captured once (at depth 0) closes that.
+// The patch touches PROCESS-GLOBAL Date/Math.random. The small reader/writer gate
+// keeps non-strict runs concurrent, but drains them before a strict run and blocks
+// new ones until restoration. Strict runs are serialized.
 let strictDepth = 0;
 let strictSavedDate: DateConstructor;
 let strictSavedRandom: () => number;
+let activeNonStrictRuns = 0;
+let nonStrictDrain: Promise<void> | undefined;
+let resolveNonStrictDrain: (() => void) | undefined;
+let strictQueue = Promise.resolve();
+let waitingStrictRuns = 0;
+
+async function acquireRunSlot(strict: boolean): Promise<() => void> {
+  if (strict) {
+    waitingStrictRuns++;
+    const previous = strictQueue;
+    let release!: () => void;
+    strictQueue = new Promise<void>((resolve) => (release = resolve));
+    await previous;
+    if (activeNonStrictRuns > 0) await nonStrictDrain;
+    waitingStrictRuns--;
+    return release;
+  }
+
+  while (waitingStrictRuns > 0 || strictDepth > 0) await strictQueue;
+  if (activeNonStrictRuns++ === 0) {
+    nonStrictDrain = new Promise<void>((resolve) => (resolveNonStrictDrain = resolve));
+  }
+  return () => {
+    if (--activeNonStrictRuns === 0) {
+      resolveNonStrictDrain?.();
+      nonStrictDrain = undefined;
+      resolveNonStrictDrain = undefined;
+    }
+  };
+}
 
 async function withStrict<T>(strict: boolean | undefined, fn: () => T | Promise<T>): Promise<T> {
-  if (!strict) return await fn();
-  const entering = strictDepth === 0;
-  if (entering) {
-    // Snapshot the TRUE originals before any patch (a plain var write, can't throw).
-    strictSavedDate = globalThis.Date;
-    strictSavedRandom = Math.random;
-  }
-  // Increment and enter the try BEFORE patching, so a throw mid-patch (e.g. a
-  // frozen global) still hits finally and restores — no leaked StrictDate.
-  strictDepth++;
+  const releaseRunSlot = await acquireRunSlot(Boolean(strict));
   try {
+    if (!strict) return await fn();
+    const entering = strictDepth === 0;
     if (entering) {
-      const boom = (what: string): never => {
-        throw new Error(`omw --strict: ${what} is forbidden in a deterministic workflow (pass values in via args)`);
-      };
-      class StrictDate extends strictSavedDate {
-        constructor(...args: any[]) {
-          if (args.length === 0) boom("new Date()");
-          super(...(args as [number]));
+      // Snapshot the TRUE originals before any patch (a plain var write, can't throw).
+      strictSavedDate = globalThis.Date;
+      strictSavedRandom = Math.random;
+    }
+    // Increment and enter the try BEFORE patching, so a throw mid-patch (e.g. a
+    // frozen global) still hits finally and restores — no leaked StrictDate.
+    strictDepth++;
+    try {
+      if (entering) {
+        const boom = (what: string): never => {
+          throw new Error(`omw --strict: ${what} is forbidden in a deterministic workflow (pass values in via args)`);
+        };
+        class StrictDate extends strictSavedDate {
+          constructor(...args: any[]) {
+            if (args.length === 0) boom("new Date()");
+            super(...(args as [number]));
+          }
+          static now(): number {
+            return boom("Date.now()");
+          }
         }
-        static now(): number {
-          return boom("Date.now()");
-        }
+        globalThis.Date = StrictDate as DateConstructor;
+        Math.random = () => boom("Math.random()");
       }
-      globalThis.Date = StrictDate as DateConstructor;
-      Math.random = () => boom("Math.random()");
+      return await fn();
+    } finally {
+      strictDepth--;
+      if (strictDepth === 0) {
+        // Restore each global independently: if one assignment throws (the global
+        // was frozen mid-run — the same hostile env this guards against), the other
+        // must still be restored, or a throwing patch leaks process-wide. Swallow
+        // the restore error so it can't mask fn()'s real result/error either.
+        try {
+          globalThis.Date = strictSavedDate;
+        } catch {}
+        try {
+          Math.random = strictSavedRandom;
+        } catch {}
+      }
     }
-    return await fn();
   } finally {
-    strictDepth--;
-    if (strictDepth === 0) {
-      // Restore each global independently: if one assignment throws (the global
-      // was frozen mid-run — the same hostile env this guards against), the other
-      // must still be restored, or a throwing patch leaks process-wide. Swallow
-      // the restore error so it can't mask fn()'s real result/error either.
-      try {
-        globalThis.Date = strictSavedDate;
-      } catch {}
-      try {
-        Math.random = strictSavedRandom;
-      } catch {}
-    }
+    releaseRunSlot();
   }
 }
 

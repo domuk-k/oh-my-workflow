@@ -32,7 +32,7 @@ benefits from structure you'd otherwise hand-roll:
 - **Budget-bounded loop**: keep working until a reported output-token ceiling is reached.
 
 You want: bounded concurrency, schema-validated node output with automatic
-node-level retry, a replayable journal, and a `null` result for ordinary node
+node-level retry, a resume-capable journal, and a `null` result for ordinary node
 failures. Script errors, invalid runtime configuration, and exhausted budgets
 remain explicit run failures.
 
@@ -47,7 +47,7 @@ though you can opt into a determinism sandbox with `--strict`.
 `omw` binary required:
 
 ```sh
-bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake
+bunx oh-my-workflow@0.5.0 run examples/deep-research --agent fake
 # → {"confirmed":[…],"summary":{…}}    exit 0 · no key · no agent-API usage cost · deterministic
 ```
 
@@ -60,18 +60,18 @@ prints one result JSON. Want to watch it happen? Add `--pretty` for the
 phase/fan-out tree on stderr:
 
 ```sh
-bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake --pretty
+bunx oh-my-workflow@0.5.0 run examples/deep-research --agent fake --pretty
 ```
 
 `--agent fake` is a built-in, deterministic adapter — it's the no-key demo engine
 and the test double. For real work, write the workflow and run it with an installed
 `omw` binary. If none is installed, use
-`bunx github:domuk-k/oh-my-workflow run <file>` instead. The CLI defaults to
+`bunx oh-my-workflow@0.5.0 run <file>` instead. The CLI defaults to
 `--agent auto`, choosing the current/installed coding-agent CLI. Set
 `OMW_AGENT=claude|codex|hermes` only when you need to pin it.
 
 > **Reading this as a skill?** You already have it. To install/update it for a
-> coding agent: `bunx github:domuk-k/oh-my-workflow skill install` (→ `~/.claude/skills/`;
+> coding agent: `bunx oh-my-workflow@0.5.0 skill install` (→ `~/.claude/skills/`;
 > `--codex` → `~/.codex/skills/`; `--opencode` → `~/.config/opencode/skills/`;
 > `--project` for one repo). `omw skill path` prints the bundled copy for other
 > hosts. Re-run `skill install` anytime to refresh.
@@ -365,7 +365,7 @@ while (budget.total && budget.remaining() > 50_000) {
 ## The run → journal → fix loop (this is the UX)
 
 ```sh
-bunx github:domuk-k/oh-my-workflow run my-workflow.js --args '{"q":"…"}' --pretty
+bunx oh-my-workflow@0.5.0 run my-workflow.js --args '{"q":"…"}' --pretty
 ```
 
 - **stdout** = the result JSON, one blob. Pipe it, parse it.

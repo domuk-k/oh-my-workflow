@@ -17,7 +17,7 @@ your script instead of pretending a partial run is complete.
 ## Try it without an API key
 
 ```sh
-bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake
+bunx oh-my-workflow@0.5.0 run examples/deep-research --agent fake
 ```
 
 ```json
@@ -27,12 +27,12 @@ bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake
 Fan-out, schema self-repair, timeout handling — one pass, deterministic:
 
 ```sh
-bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake --pretty
+bunx oh-my-workflow@0.5.0 run examples/deep-research --agent fake --pretty
 ```
 
-`--agent fake` needs no network. Swap to `--agent claude` (after `claude login`) or `--agent codex` for real runs.
+`--agent fake` makes no agent/API network call. Swap to `--agent claude` (after `claude login`) or `--agent codex` for real runs.
 
-The command fetches the GitHub source through `bunx`; it requires **Bun** (not Node `npx`).
+`bunx` uses the network to fetch the exact npm release; it requires **Bun** (not Node `npx`).
 
 ---
 
@@ -84,8 +84,7 @@ agent to author, run, and repair these workflows.
 ## Install the skill
 
 ```sh
-bunx github:domuk-k/oh-my-workflow skill install --codex
-npx skills add domuk-k/oh-my-workflow --skill omw
+bunx oh-my-workflow@0.5.0 skill install --codex
 
 # from a clone:
 bun src/cli/omw.ts skill install --codex
@@ -93,7 +92,7 @@ bun src/cli/omw.ts skill install --codex
 
 This installs the authoring skill, not the runtime binary. Then: *"use
 oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` and runs it through
-an installed `omw` binary or the same `bunx github:domuk-k/oh-my-workflow` prefix.
+an installed `omw` binary or the same `bunx oh-my-workflow@0.5.0` prefix.
 
 ---
 

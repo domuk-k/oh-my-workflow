@@ -10,7 +10,7 @@ export const IN_SESSION_ADAPTER_REQUIRED_HINT =
   "Pass `adapter` (makeInSessionAdapter / makeKiroInSessionAdapter) or `probe` to runInSessionWorkflow. " +
   "For headless runs use `omw run --agent claude|codex|fake`.";
 
-export type InSessionRunOptions = Pick<RunOptions, "wfPath" | "concurrency" | "budget" | "strictResume" | "strict"> & {
+export type InSessionRunOptions = Pick<RunOptions, "wfPath" | "concurrency" | "budget" | "strictResume"> & {
   args?: unknown;
 };
 
@@ -69,7 +69,6 @@ export async function runInSessionWorkflow(
       concurrency: opts.concurrency,
       budget: opts.budget,
       strictResume: opts.strictResume,
-      strict: opts.strict,
       pretty: false,
     },
     runDeps,

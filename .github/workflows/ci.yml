@@ -22,5 +22,14 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun test
+      - name: Smoke packed CLI
+        run: |
+          pack_dir="$(mktemp -d)"
+          bun pm pack --ignore-scripts --destination "$pack_dir" >/dev/null
+          mkdir "$pack_dir/app"
+          cd "$pack_dir/app"
+          bun init -y >/dev/null
+          bun add "$pack_dir"/oh-my-workflow-*.tgz >/dev/null
+          ./node_modules/.bin/omw run node_modules/oh-my-workflow/examples/deep-research --agent fake
       - run: bun run docs:build
       - run: bun run docs:check

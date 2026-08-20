@@ -24,6 +24,8 @@ All notable changes to this project are documented here. This project adheres to
   no longer replace a successful node result.
 - Budgeted Claude calls now fail closed when `usage.output_tokens` is absent,
   and non-zero JSON results preserve any reported output-token receipt.
+- Strict and non-strict runs no longer overlap while process-global determinism
+  guards are installed; the embedder API does not expose CLI-only `--strict`.
 
 ### Changed (breaking)
 
