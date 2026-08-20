@@ -43,49 +43,29 @@
     "intro": "oh-my-workflow(omw)는 코딩에이전트 CLI 통째를 plain-JS workflow의 노드로 실행합니다. 독립적인 repo 점검을 병렬 실행하고 형태가 검증된 노드 출력으로 결과 하나를 조립하며 실패를 journal에 남기는 작업에 맞춰져 있습니다.",
     "quickstartHeading": "퀵스타트",
     "quickstartBody": "Bun 1.3.10+이 필요합니다. fake 어댑터는 API 키나 에이전트 호출이 필요 없으며, bunx는 정확한 npm 릴리스를 받을 때 네트워크를 사용합니다:",
+    "skillHeading": "스킬 설치",
+    "skillBody": "Codex에 번들된 작성 스킬을 설치합니다. Claude는 --codex를 빼고, OpenCode는 --opencode를 사용하세요:",
     "hooksHeading": "훅(hooks)",
     "hookAgentBody": "코딩에이전트 CLI 노드 하나를 실행합니다. schema를 주면 omw가 검증하고 오류를 노드에 다시 물려 최대 2회 재프롬프트합니다. 일반 노드 실패는 null이며 budget과 journal 실패는 run을 중단합니다.",
     "hookFlowBody": "아이템별 흐름 vs. 배리어. 기본은 pipeline.",
     "adaptersHeading": "어댑터",
     "adaptersBody": "노드는 헤드리스 prompt→result CLI로 구동되는 코딩에이전트입니다: fake, claude, codex, hermes. CLI가 없으면 install hint와 함께 exit 3.",
     "toc": "이 페이지에서",
-    "soon": "준비 중",
     "sidebar": [
       {
-        "group": "시작",
+        "group": "가이드",
         "items": [
           { "label": "소개", "href": "#top", "active": true },
           { "label": "퀵스타트", "href": "#quickstart" },
-          { "label": "API가 익숙한 이유" }
-        ]
-      },
-      {
-        "group": "작성하기",
-        "items": [
+          { "label": "스킬 설치", "href": "#skill" },
           { "label": "훅: agent / parallel", "href": "#hooks" },
-          { "label": "pipeline vs parallel" },
-          { "label": "스키마 & 자가수정" },
-          { "label": "budget & workflow()" }
-        ]
-      },
-      {
-        "group": "런타임",
-        "items": [
-          { "label": "어댑터", "href": "#adapters" },
-          { "label": "Resume & 결정성" },
-          { "label": "종료 코드" }
-        ]
-      },
-      {
-        "group": "레퍼런스",
-        "items": [
-          { "label": "CLI: omw run" },
-          { "label": "omw skill install" }
+          { "label": "어댑터", "href": "#adapters" }
         ]
       }
     ],
     "tocItems": [
       { "label": "퀵스타트", "href": "#quickstart" },
+      { "label": "스킬 설치", "href": "#skill" },
       { "label": "훅(hooks)", "href": "#hooks" },
       { "label": "어댑터", "href": "#adapters" }
     ]

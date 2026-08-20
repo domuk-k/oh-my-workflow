@@ -43,49 +43,29 @@
     "intro": "oh-my-workflow (omw) runs whole coding-agent CLIs as nodes in a plain-JS workflow. It is built for independent repo checks that run in parallel and assemble one result from shape-validated node outputs while journaling failures.",
     "quickstartHeading": "Quickstart",
     "quickstartBody": "Requires Bun 1.3.10+. The fake adapter needs no API key or agent call; bunx uses the network to fetch the exact npm release:",
+    "skillHeading": "Install the skill",
+    "skillBody": "Install the bundled authoring skill for Codex. Omit --codex for Claude, or use --opencode for OpenCode:",
     "hooksHeading": "The hooks",
     "hookAgentBody": "Run one coding-agent CLI node. With a schema, omw validates and re-prompts the node with the errors up to 2×. Ordinary node failures return null; budget and journal failures stop the run.",
     "hookFlowBody": "Per-item flow vs. barrier. Default to pipeline.",
     "adaptersHeading": "Adapters",
     "adaptersBody": "A node is a coding agent driven through its headless prompt→result CLI: fake, claude, codex, hermes. A missing CLI exits 3 with an install hint.",
     "toc": "On this page",
-    "soon": "soon",
     "sidebar": [
       {
-        "group": "Start",
+        "group": "Guide",
         "items": [
           { "label": "Introduction", "href": "#top", "active": true },
           { "label": "Quickstart", "href": "#quickstart" },
-          { "label": "Why the API looks familiar" }
-        ]
-      },
-      {
-        "group": "Authoring",
-        "items": [
+          { "label": "Install the skill", "href": "#skill" },
           { "label": "Hooks: agent / parallel", "href": "#hooks" },
-          { "label": "pipeline vs parallel" },
-          { "label": "Schemas & self-repair" },
-          { "label": "budget & workflow()" }
-        ]
-      },
-      {
-        "group": "Runtime",
-        "items": [
-          { "label": "Adapters", "href": "#adapters" },
-          { "label": "Resume & determinism" },
-          { "label": "Exit codes" }
-        ]
-      },
-      {
-        "group": "Reference",
-        "items": [
-          { "label": "CLI: omw run" },
-          { "label": "omw skill install" }
+          { "label": "Adapters", "href": "#adapters" }
         ]
       }
     ],
     "tocItems": [
       { "label": "Quickstart", "href": "#quickstart" },
+      { "label": "Install the skill", "href": "#skill" },
       { "label": "The hooks", "href": "#hooks" },
       { "label": "Adapters", "href": "#adapters" }
     ]

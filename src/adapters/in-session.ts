@@ -74,12 +74,20 @@ export function extractInSessionText(value: unknown): string | undefined {
 }
 
 export function extractInSessionOutputTokens(value: unknown, depth = 0): number | undefined {
-  if (depth > 8 || !isRecord(value)) return undefined;
+  if (depth > 8) return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const tokens = extractInSessionOutputTokens(item, depth + 1);
+      if (tokens !== undefined) return tokens;
+    }
+    return undefined;
+  }
+  if (!isRecord(value)) return undefined;
   for (const key of ["outputTokens", "output_tokens"] as const) {
     const tokens = value[key];
     if (typeof tokens === "number" && Number.isFinite(tokens) && tokens >= 0) return tokens;
   }
-  for (const key of ["usage", "meta", "result", "data"] as const) {
+  for (const key of ["usage", "meta", "result", "data", "subagents", "results", "items", "content"] as const) {
     const tokens = extractInSessionOutputTokens(value[key], depth + 1);
     if (tokens !== undefined) return tokens;
   }

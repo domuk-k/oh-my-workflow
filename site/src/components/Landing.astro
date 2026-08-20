@@ -30,7 +30,7 @@ const L = t.landing;
       <div class="lab">{L.twinNativeLabel}</div>
       <pre><span class="k">export default async function</span> ({"{"} agent, parallel {"}"}) {"{"}
   <span class="k">const</span> found = <span class="k">await</span> parallel(
-    topics.map((t) =&gt; () =&gt; agent(<span class="s">`research $&#123;t&#125;`</span>)));
+    <mark class="ins">args.</mark>topics.map((t) =&gt; () =&gt; agent(<span class="s">`research $&#123;t&#125;`</span>)));
   <span class="k">return</span> {"{"} found {"}"};
 {"}"}</pre>
     </div>

@@ -6,7 +6,7 @@
 #
 #   ./scripts/smoke-live.sh                 # fake only (free)
 #   OMW_LIVE=1 ./scripts/smoke-live.sh      # + claude/codex/hermes (real tokens)
-#   OMW_CMD="bunx oh-my-workflow@0.4.0 run" OMW_LIVE=1 ./scripts/smoke-live.sh  # test the published build
+#   OMW_CMD="bunx oh-my-workflow@0.5.0 run" OMW_LIVE=1 ./scripts/smoke-live.sh  # test the published build
 #
 # Run from the repo root. Exit 0 = all attempted adapters green; 1 = any failure.
 set -uo pipefail

@@ -33,8 +33,8 @@ All notable changes to this project are documented here. This project adheres to
   subprocess timeouts escalate from terminate to forced kill after a short grace.
 - The CLI sets `process.exitCode` instead of forcing immediate exit, so large or
   piped JSON artifacts flush completely.
-- In-session adapters now preserve model and budget requirements on follow-up,
-  extract host usage receipts, and reject budgeted calls when usage is absent.
+- In-session adapters now preserve budget requirements on follow-up, extract
+  nested host usage receipts, and reject budgeted calls when usage is absent.
 - Resume keys now include timeout and retry bounds, so tighter limits cannot
   reuse a result produced under looser execution policy.
 

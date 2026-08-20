@@ -99,6 +99,16 @@ describe("makeKiroInSessionAdapter", () => {
     if (!result.ok) expect(result.stderr).toContain("--budget is unsupported");
   });
 
+  test("reads usage nested in Kiro result arrays", async () => {
+    const adapter = makeKiroInSessionAdapter({
+      tool: async () => ({ results: [{ subagents: [{ summary: "done", usage: { output_tokens: 9 } }] }] }),
+    });
+    const result = await adapter.invoke({ prompt: "hello", requireOutputTokens: true });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.meta.outputTokens).toBe(9);
+  });
+
   test("maps host errors to adapter failures", async () => {
     const adapter = makeKiroInSessionAdapter({
       tool: async () => {

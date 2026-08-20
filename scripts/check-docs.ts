@@ -25,7 +25,7 @@ for (const phrase of [
   "dynamic Workflow",
   "examples/deep-research",
   "--agent fake",
-  "omw skill install",
+  "oh-my-workflow@0.5.0 skill install",
 ]) {
   add(`site contains: ${phrase}`, html.includes(phrase));
 }
@@ -36,7 +36,7 @@ add("skill frontmatter exposes /omw", /^name:\s*omw\s*$/m.test(skillText));
 add("skill teaches headless adapters", /--agent (auto|fake|claude)/.test(skillText));
 add(
   "landing uses workflow args as the second parameter",
-  landingText.includes('{"}"}<mark class="ins">, args</mark>)') && !landingText.includes("parallel, args"),
+  landingText.includes('{"}"}<mark class="ins">, args</mark>)') && landingText.includes('<mark class="ins">args.</mark>topics'),
 );
 
 const failed = checks.filter((c) => !c.ok);
