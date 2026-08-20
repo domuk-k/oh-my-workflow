@@ -13,13 +13,12 @@ you can read your own failure and fix your own script. (What's "deterministic" i
 scoped below — the engine's guarantees and `--agent fake`, not your script unless
 you pass `--strict`.)
 
-omw is the **open twin of Claude Code's native dynamic Workflow**: the same
-authoring shape and vocabulary (`agent` / `parallel` / `pipeline` / `workflow` /
-`budget`). The default node transport is an external coding-agent CLI; the
-in-session bridge lets a capable host provide the transport directly. There is
-**no magic** — no source transform, no ambient globals, no sandbox-by-default.
-Your script is ordinary JavaScript; the runtime hands it a **hooks object** as
-the first argument. There is no DSL to learn.
+omw is for independent coding-agent checks that should run in parallel and return
+one shape-validated artifact with explicit failure receipts. Its vocabulary
+(`agent` / `parallel` / `pipeline` / `workflow` / `budget`) resembles host-native
+workflow tools, but its default node transport is an external coding-agent CLI.
+There is no source transform or ambient-global DSL: the runtime hands ordinary
+JavaScript a **hooks object** as the first argument.
 
 ## When to use this
 
@@ -30,7 +29,7 @@ benefits from structure you'd otherwise hand-roll:
 - **Verify / vote**: produce a finding, then have K independent agents judge it.
 - **Pipeline**: each item flows scope → search → verify → synthesize independently.
 - **Loop-until-dry**: keep spawning finders until a round returns nothing new.
-- **Budget-bounded loop**: keep working until a token ceiling is reached.
+- **Budget-bounded loop**: keep working until a reported output-token ceiling is reached.
 
 You want: bounded concurrency, schema-validated node output with automatic
 node-level retry, a replayable journal, and a `null`-on-failure contract so one
@@ -89,9 +88,8 @@ export default async function ({ agent, parallel, pipeline, phase, log, workflow
 ```
 
 `args` is whatever `--args '{…}'` passed (parsed JSON). The returned value is
-serialized to stdout as the run's single result JSON. (Legacy `(rt, args)` scripts
-that call `rt.agent(…)` still run — the same object is passed — but they're
-deprecated; run `omw codemod <file>` to migrate. The bridge is removed in 0.5.)
+serialized to stdout as the run's single result JSON. Version 0.5 rejects legacy
+`(rt, args)` scripts; run `omw codemod <file> --write` before upgrading.
 
 Optionally declare a `meta` block (a pure literal, like native):
 
@@ -188,7 +186,7 @@ const sub = await workflow({ scriptPath: "./refine.ts" }, { topic });
 A `workflow()` call **inside** a child throws (`"workflow() nesting is one level
 only"`) — a runaway-recursion backstop.
 
-### `budget` — token ceiling
+### `budget` — reported output-token ceiling
 
 `budget` is `{ total, spent(), remaining() }`. Set a ceiling with `--budget N`;
 `total` is `null` when unset and `remaining()` is then `Infinity`. Once spent
@@ -207,7 +205,8 @@ while (budget.remaining() > 50_000) {           // guard, or let agent() throw a
 > `budget` counts **output tokens the adapter reports** (success or a failure
 > envelope that carries `usage`). A token-less failure (a killed timeout reports
 > no usage) can't be counted — so a loop on a purely-timing-out node isn't bounded
-> by `--budget` alone; pair it with your own iteration cap.
+> by `--budget` alone; pair it with your own iteration cap. It is not a cost,
+> input-token, reasoning-token, or exact concurrent-overshoot cap.
 
 ### `phase(title)` and `log(msg)`
 
@@ -653,7 +652,7 @@ but cross-CLI routing is future work). Don't write scripts that assume these.
 
 ## Quick reference
 
-- Module: `export default async ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result` · optional `export const meta` / `export const fake`. (Legacy `(rt, args)` still runs; `omw codemod <file>` migrates it.)
+- Module: `export default async ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result` · optional `export const meta` / `export const fake`. Use `omw codemod <file> --write` to migrate pre-0.5 `(rt, args)` scripts.
 - Path resolves a directory to `workflow.js` / `workflow.ts` / `index.js` / `index.ts`.
 - `omw run <wf> [--agent <auto|in-session|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]`
 - `runInSessionWorkflow({ wfPath, args?, concurrency?, budget?, strictResume?, strict? })` — `oh-my-workflow/in-session`; exit `3` when no host probe.

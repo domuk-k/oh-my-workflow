@@ -5,9 +5,12 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun&logoColor=000)](https://bun.sh)
 
-> **Open dynamic-workflow runtime for coding-agent CLIs** — write a plain-JS orchestration script; nodes are `claude -p`, `codex exec`, or other headless agent CLIs. Schema-gated outputs, JSONL journal, repair loop. Portable twin of Claude Code's native Workflow tool.
+> **Run independent coding-agent repo checks in parallel and return one
+> shape-validated artifact — with explicit receipts when a check fails.**
 
-**omw** is the thin glue: run the script, validate each node, journal every step, and let the authoring agent read failures and fix its own workflow.
+**omw** runs `claude -p` or `codex exec` as nodes in a plain-JS workflow. It
+validates output shape, journals each attempt, and leaves completeness policy in
+your script instead of pretending a partial run is complete.
 
 ---
 
@@ -35,32 +38,14 @@ bun src/cli/omw.ts run examples/deep-research --agent fake --pretty
 
 ---
 
-## Why oh-my-workflow?
+## The job it is built for
 
-Claude Code ships a **dynamic Workflow** tool: the model writes a JS orchestration script; the harness runs `agent()` / `parallel()` / `pipeline()` with in-harness subagents. Excellent — and closed to that host. omw is the **open twin**: same orchestration vocabulary, portable across CLI agents (Claude, Codex, Hermes, Pi, Gemini, Grok, …) via thin `AgentPort` adapters.
+Use omw when several repo checks are independent, each needs a coding agent's
+tools and context, and the final consumer needs one predictable JSON shape.
+Ordinary shell scripts remain the better choice for deterministic commands.
 
-**omw is the open twin.** Same authoring vocabulary, but:
-
-| | Native Workflow | omw |
-|---|-----------------|-----|
-| **Runs where** | Claude Code only | Claude Code, Codex, cron, CI, any shell |
-| **A node is** | In-harness subagent | Whole external coding-agent CLI |
-| **Script style** | Harness-specific | Boring standard JS — no transform, no ambient globals |
-| **Debug surface** | Host journal | `.omw/<runId>.jsonl` + `--pretty` tree |
-
-```ts
-// native — inside Claude Code
-export default async function ({ agent, parallel }) {
-  const found = await parallel(topics.map((t) => () => agent(`research ${t}`)));
-  return { found };
-}
-
-// omw — anywhere, nearly identical
-export default async function ({ agent, parallel }, args) {
-  const found = await parallel(topics.map((t) => () => agent(`research ${t}`)));
-  return { found: found.filter(Boolean) };
-}
-```
+The runtime supplies bounded parallel subprocesses, JSON Schema shape validation
+with repair attempts, and a JSONL receipt for successes, retries, and failures.
 
 ---
 
@@ -86,12 +71,13 @@ export default async function ({ agent, parallel, phase, budget }, args) {
 | `parallel(thunks)` | Concurrent fan-out; failures → `null`. |
 | `pipeline(items, …stages)` | Per-item staged flow. |
 | `workflow(ref, args?)` | Inline sub-workflow (one level). |
-| `budget` | Token spend ceiling via `--budget N`. |
+| `budget` | Reported output-token ceiling via `--budget N`. |
 | `phase(title)` / `log(msg)` | Journal / `--pretty` side-channel. |
 
 Every step lands in `.omw/<runId>.jsonl`. On failure, read `kind` (`timeout`, `schema_violation`, `nonzero_exit`, …) and fix the script.
 
-**Primary product:** [`skill/SKILL.md`](skill/SKILL.md) — teaches coding agents to author, run, and repair omw workflows.
+**Optional authoring skill:** [`skill/SKILL.md`](skill/SKILL.md) teaches a coding
+agent to author, run, and repair these workflows.
 
 **Docs site:** [oh-my-workflow.vercel.app](https://oh-my-workflow.vercel.app) · **Roadmap:** [ROADMAP.md](ROADMAP.md)
 
@@ -110,15 +96,10 @@ Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` 
 
 ---
 
-## Adapters
+## Agent CLIs
 
-| Adapter | Status | Notes |
-|---------|--------|-------|
-| **fake** | Built-in | Deterministic demo + tests; no API key |
-| **claude** | Full | `claude -p --output-format json`; schema repair via `--resume` |
-| **codex** | Experimental | `codex exec --json` |
-| **hermes** | Experimental | `hermes -z` one-shot |
-| **pi** | Planned | — |
+`fake` is the deterministic no-key demo. `claude` is the established live path;
+`codex` and `hermes` are experimental. One workflow run binds one adapter.
 
 **In-session** (host subagent callback) is **embedder-only** — `runInSessionWorkflow()` from `oh-my-workflow/in-session` with an explicit adapter. See `examples/host-runners/kiro.ts`. The CLI does not probe hosts.
 
@@ -128,14 +109,22 @@ Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` 
 
 ## Honest scope
 
-- **Not** a decompiled Claude Code clone — a faithful OSS reconstruction of the dynamic-workflow *pattern*.
+- JSON Schema validates output shape, not factual correctness or source truth.
 - **"Deterministic"** = engine guarantees + `--agent fake`. Your script stays conventional unless you pass `--strict`.
 - **Resume** = per-node semantic cache keys; filesystem side-channels need care — use `--strict-resume` when nodes pass state via the filesystem.
 - **Nodes are heavy** — whole agent CLIs, not lightweight function calls. The novel piece is the **schema-gate self-repair loop**.
+- `--budget` counts reported output tokens only. It is not a cost, input-token,
+  reasoning-token, or exact concurrent-overshoot cap.
+
+## Why the API looks familiar
+
+Claude Code's native Workflow uses similar `agent` / `parallel` / `pipeline`
+vocabulary. omw applies that small authoring shape to external CLI processes; it
+does not claim host-level isolation, scheduling, or UI parity.
 
 ### Migrating from 0.3
 
-Legacy `(rt, args)` scripts still run (deprecated). Mechanical upgrade:
+Version 0.5 rejects positional `(rt, args)` scripts. Mechanical upgrade:
 
 ```sh
 omw codemod path/to/workflow.ts --write

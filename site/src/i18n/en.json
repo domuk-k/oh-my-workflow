@@ -1,10 +1,10 @@
 {
   "lang": "en",
   "meta": {
-    "title": "oh-my-workflow — the open dynamic-workflow runtime",
-    "desc": "The portable twin of Claude Code's native dynamic Workflow. Plain-JS orchestration whose nodes are whole coding-agent CLIs."
+    "title": "oh-my-workflow — parallel repo checks through coding-agent CLIs",
+    "desc": "Run independent coding-agent repo checks in parallel and return one shape-validated artifact with failure receipts."
   },
-  "footer": "the open twin of dynamic Workflow",
+  "footer": "plain-JS workflows for coding-agent CLIs",
   "nav": {
     "home": "Home",
     "docs": "Docs",
@@ -13,19 +13,19 @@
     "langLabel": "한국어"
   },
   "landing": {
-    "pill": "the open twin of Claude Code's dynamic Workflow",
-    "tagline": "Write a plain-JS orchestration script. Its nodes are whole coding-agent CLIs you already have — <code>claude -p</code>, <code>codex exec</code>, <code>hermes</code>. omw is the thin, readable glue.",
+    "pill": "parallel repo checks, one shaped result",
+    "tagline": "Run independent checks through <code>claude -p</code> or <code>codex exec</code>, validate each output's shape, and keep an explicit receipt when a node fails.",
     "ctaPrimary": "Quickstart — no API key",
     "ctaSecondary": "View source",
-    "twinHeading": "Same shape as the native tool. Anywhere.",
-    "twinSub": "The script is nearly identical — what differs is what a node is and where it runs.",
+    "twinHeading": "A small, familiar authoring shape",
+    "twinSub": "The vocabulary resembles host-native workflow tools; omw runs whole external CLI processes and does not claim host-level parity.",
     "twinNativeLabel": "native dynamic Workflow — inside Claude Code",
-    "twinOpenLabel": "omw — anywhere, same shape",
+    "twinOpenLabel": "omw — external CLI nodes",
     "diffLegend": "<mark class=\"ins\">marked</mark> = the only two spots that change.",
     "honestHeading": "Honest about the trade-off",
     "honestNote": "✱ note",
     "honestTitle": "This is slower and pricier than a raw-API orchestrator — on purpose.",
-    "honestBody": "A node is a whole coding agent, not one completion: it reads your repo, runs tools, iterates. You pay process + agent-loop overhead per node. The payoff: you orchestrate agents, not models — and Claude Code itself ships this exact pattern internally. omw is the portable twin, with the trade-offs named, not hidden.",
+    "honestBody": "A node is a whole coding agent, not one completion: it reads your repo, runs tools, and iterates. You pay process and agent-loop overhead per node. JSON Schema validates shape, not truth, and the journal is a runtime receipt rather than source provenance.",
     "adaptersHeading": "Bring your own agent",
     "colAdapter": "adapter",
     "colStatus": "status",
@@ -41,7 +41,7 @@
   "docs": {
     "crumb": "Start / Introduction",
     "title": "Introduction",
-    "intro": "oh-my-workflow (omw) is the open, portable twin of Claude Code's native dynamic Workflow. You write a plain-JS orchestration script whose nodes are whole coding-agent CLIs; omw runs the script, schema-gates each node's output, and journals every step.",
+    "intro": "oh-my-workflow (omw) runs whole coding-agent CLIs as nodes in a plain-JS workflow. It is built for independent repo checks that run in parallel and return one shape-validated result with explicit failure receipts.",
     "quickstartHeading": "Quickstart",
     "quickstartBody": "No API key, no network — the built-in fake adapter runs the whole spine:",
     "hooksHeading": "The hooks",
@@ -57,7 +57,7 @@
         "items": [
           { "label": "Introduction", "href": "#top", "active": true },
           { "label": "Quickstart", "href": "#quickstart" },
-          { "label": "The twin framing" }
+          { "label": "Why the API looks familiar" }
         ]
       },
       {

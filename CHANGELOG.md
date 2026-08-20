@@ -5,6 +5,18 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Codex `turn.completed.usage.output_tokens` now reaches runtime accounting.
+  Budgeted Codex nodes fail explicitly when the CLI omits that usage receipt.
+
+### Changed (breaking)
+
+- Removed the deprecated positional `(rt, args)` workflow bridge. Run
+  `omw codemod <file> --write` before upgrading.
+- `--budget` is documented as a reported output-token ceiling, not a cost or
+  total-token cap.
+
 ### Changed
 
 - **Public `docs/` tree removed** — maintainer notes, specs, research, and openq live
