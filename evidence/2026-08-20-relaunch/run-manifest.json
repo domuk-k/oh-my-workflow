@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "status": "verified-candidate-not-published",
+  "startedAt": "2026-08-20T12:12:09.467Z",
+  "finishedAt": "2026-08-20T12:13:45Z",
+  "auditedCommit": "49d2f9ffda914bc759734a363fd28ace8b02fa52",
+  "workingTreeDirty": false,
+  "workflow": ".github/omw/relaunch-audit.ts",
+  "workflowSha256": "c96057d0ea8dcc09eff3c65e7da602df02a87eaeef754c107f1372af0954c1f1",
+  "runId": "r-mt1hd46x-1eeb-a64eeeb5",
+  "normalizedCommand": "bun src/cli/omw.ts run .github/omw/relaunch-audit.ts --agent codex --concurrency 3 --resume <matching-run-id> --args <local-paths-and-head>",
+  "environment": {
+    "platform": "macOS",
+    "bun": "1.3.14",
+    "codexCli": "0.148.0",
+    "adapter": "codex",
+    "workspace": "detached clean worktree",
+    "userConfigurationPresent": true,
+    "networkAvailable": true
+  },
+  "coverage": {
+    "expected": [
+      "claude-subagents",
+      "codex-cli",
+      "langgraph-workflows-agents",
+      "runtime-contract",
+      "onboarding-claims",
+      "release-surface"
+    ],
+    "observed": [
+      "claude-subagents",
+      "codex-cli",
+      "langgraph-workflows-agents",
+      "runtime-contract",
+      "onboarding-claims",
+      "release-surface"
+    ],
+    "sourceAnalyses": {
+      "count": 3,
+      "mode": "resumed-from-matching-journal"
+    },
+    "repositoryAnalyses": {
+      "count": 3,
+      "mode": "live-at-audited-commit"
+    },
+    "synthesis": "live",
+    "crosscheck": {
+      "mode": "live-fresh-context",
+      "accepted": true,
+      "issues": []
+    }
+  },
+  "journal": {
+    "published": false,
+    "retention": "maintainer-local",
+    "reason": "may contain prompts, stderr, local paths, and repository material"
+  },
+  "releaseGates": {
+    "typecheck": "passed",
+    "tests": {
+      "passed": 268,
+      "skipped": 2,
+      "failed": 0
+    },
+    "liveAdapterTests": {
+      "claude": "passed",
+      "codex": "passed"
+    },
+    "docsBuild": "passed",
+    "docsCheck": "passed",
+    "packedConsumerSmoke": "passed",
+    "packedSkillInstallSmoke": "passed"
+  },
+  "package": {
+    "candidateVersion": "0.5.0",
+    "registryLatestObserved": "0.4.0",
+    "published": false,
+    "tarballCommitted": false,
+    "tarballSha256": "b51dc4e2654fba3356d3832c1d040e1733c832190cd2766453731b8c7fa1f8cc"
+  },
+  "releaseBlockers": [
+    "npm authentication is unavailable",
+    "npm 0.4.1 and its existing GitHub release are not aligned",
+    "v0.5.0 is not tagged",
+    "no provenance-aware publish workflow exists"
+  ]
+}

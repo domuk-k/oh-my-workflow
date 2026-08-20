@@ -12,12 +12,17 @@
 validates output shape, journals each attempt, and leaves completeness policy in
 your script instead of pretending a partial run is complete.
 
+**Release status:** 0.5.0 is a locally verified candidate, not yet published to
+npm. See the [dogfood report](evidence/2026-08-20-relaunch/report.md).
+
 ---
 
 ## Try it without an API key
 
 ```sh
-bunx oh-my-workflow@0.5.0 run examples/deep-research --agent fake
+git clone https://github.com/domuk-k/oh-my-workflow.git
+cd oh-my-workflow && bun install
+bun src/cli/omw.ts run examples/deep-research --agent fake
 ```
 
 ```json
@@ -30,12 +35,13 @@ that topic, and the journal records the dropped node.
 Fan-out, schema self-repair, timeout handling — one deterministic fake demo:
 
 ```sh
-bunx oh-my-workflow@0.5.0 run examples/deep-research --agent fake --pretty
+bun src/cli/omw.ts run examples/deep-research --agent fake --pretty
 ```
 
 `--agent fake` makes no agent/API network call. Swap to `--agent claude` (after `claude login`) or `--agent codex` for real runs.
 
-`bunx` uses the network to fetch the exact npm release; it requires **Bun 1.3.10+** (not Node `npx`).
+These source-tree commands require **Bun 1.3.10+**. After 0.5.0 is published,
+the equivalent one-liner will be `bunx oh-my-workflow@0.5.0 …`.
 
 ---
 
@@ -84,7 +90,7 @@ agent to author, run, and repair these workflows.
 
 ---
 
-## Install the skill
+## Install the skill after 0.5.0 is published
 
 Install the runtime once if you prefer `omw` over the pinned `bunx` commands:
 
