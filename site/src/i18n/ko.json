@@ -2,7 +2,7 @@
   "lang": "ko",
   "meta": {
     "title": "oh-my-workflow — 코딩에이전트 CLI로 병렬 repo 점검",
-    "desc": "독립적인 repo 점검을 병렬 실행하고 실패 영수증과 함께 형태가 검증된 산출물 하나를 반환합니다."
+    "desc": "독립적인 repo 점검을 병렬 실행하고 형태가 검증된 노드 출력으로 결과 하나를 조립하며 실패를 기록합니다."
   },
   "footer": "코딩에이전트 CLI를 위한 plain-JS workflow",
   "nav": {
@@ -14,7 +14,7 @@
   },
   "landing": {
     "pill": "repo 병렬 점검, 결과는 하나",
-    "tagline": "독립적인 점검을 <code>claude -p</code> 또는 <code>codex exec</code>로 실행하고, 출력 형태를 검증하며, 노드 실패를 명시적인 영수증으로 남깁니다.",
+    "tagline": "독립적인 점검을 <code>claude -p</code> 또는 <code>codex exec</code>로 실행하고, 형태가 검증된 노드 출력으로 결과 하나를 조립하며, 모든 실패를 journal에 남깁니다.",
     "ctaPrimary": "퀵스타트 — API 키 불필요",
     "ctaSecondary": "소스 보기",
     "twinHeading": "작고 익숙한 작성 방식",
@@ -32,8 +32,8 @@
     "colNotes": "비고",
     "adapters": [
       { "name": "fake", "status": "내장", "kind": "full", "notes": "키 없이 도는 결정적 데모 + 테스트 더블" },
-      { "name": "claude", "status": "정식", "kind": "full", "notes": "JSON 출력 + --resume 으로 세션 내 스키마 자가수정" },
-      { "name": "codex", "status": "실험적", "kind": "exp", "notes": "깨진 JSONL을 견디고 실행 가능하게 실패" },
+      { "name": "claude", "status": "지원", "kind": "full", "notes": "JSON 출력 + --resume 스키마 자가수정" },
+      { "name": "codex", "status": "실험적", "kind": "exp", "notes": "0.148.0 dogfood; JSONL usage 영수증 파싱" },
       { "name": "hermes", "status": "실험적", "kind": "exp", "notes": "원샷; 스키마 재시도는 새 세션으로" },
       { "name": "pi", "status": "예정", "kind": "plan", "notes": "아직 미연결" }
     ]
@@ -41,9 +41,9 @@
   "docs": {
     "crumb": "시작 / 소개",
     "title": "소개",
-    "intro": "oh-my-workflow(omw)는 코딩에이전트 CLI 통째를 plain-JS workflow의 노드로 실행합니다. 독립적인 repo 점검을 병렬 실행하고 실패 영수증과 함께 형태가 검증된 결과 하나를 반환하는 작업에 맞춰져 있습니다.",
+    "intro": "oh-my-workflow(omw)는 코딩에이전트 CLI 통째를 plain-JS workflow의 노드로 실행합니다. 독립적인 repo 점검을 병렬 실행하고 형태가 검증된 노드 출력으로 결과 하나를 조립하며 실패를 journal에 남기는 작업에 맞춰져 있습니다.",
     "quickstartHeading": "퀵스타트",
-    "quickstartBody": "API 키도 네트워크도 없이 — 내장 fake 어댑터가 전체 척추를 돌립니다:",
+    "quickstartBody": "내장 fake 어댑터는 API 키나 에이전트 네트워크 호출이 필요 없습니다. clone과 install에는 네트워크가 필요합니다:",
     "hooksHeading": "훅(hooks)",
     "hookAgentBody": "코딩에이전트 CLI 노드 하나를 실행합니다. schema를 주면 omw가 검증하고 오류를 노드에 다시 물려 최대 2회 재프롬프트합니다. 절대 throw하지 않습니다(null-contract) — budget 소진만 예외.",
     "hookFlowBody": "아이템별 흐름 vs. 배리어. 기본은 pipeline.",

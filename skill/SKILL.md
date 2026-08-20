@@ -1,6 +1,6 @@
 ---
 name: omw
-description: Use when a task decomposes into multiple coding-agent calls that should run as one structured, schema-gated, journaled workflow — fan-out search, verify-vote, pipeline, or loop-until-dry. Teaches you to author a plain-JS omw script, run it with `omw run` or an in-session host callback, read the JSONL journal, and repair your own script from structured failures.
+description: Use when a task decomposes into multiple coding-agent calls that should run as one structured, shape-validated, journaled workflow — fan-out search, verify-vote, pipeline, or loop-until-dry. Teaches you to author a plain-JS omw script, run it with `omw run`, read the JSONL journal, and repair your own script from structured failures.
 ---
 
 # oh-my-workflow (omw)
@@ -13,8 +13,8 @@ you can read your own failure and fix your own script. (What's "deterministic" i
 scoped below — the engine's guarantees and `--agent fake`, not your script unless
 you pass `--strict`.)
 
-omw is for independent coding-agent checks that should run in parallel and return
-one shape-validated artifact with explicit failure receipts. Its vocabulary
+omw is for independent coding-agent checks that should run in parallel and assemble
+one artifact from shape-validated node outputs while journaling failure receipts. Its vocabulary
 (`agent` / `parallel` / `pipeline` / `workflow` / `budget`) resembles host-native
 workflow tools, but its default node transport is an external coding-agent CLI.
 There is no source transform or ambient-global DSL: the runtime hands ordinary
@@ -370,32 +370,24 @@ bunx github:domuk-k/oh-my-workflow run my-workflow.js --args '{"q":"…"}' --pre
   *why* a node failed and repair your script.
 - **`--pretty`** = a phase/fan-out tree on **stderr** (never stdout).
 
-### In-session execution
+### In-session embedding
 
-When this skill runs inside a host that can spawn subagents/task agents, prefer
-the **in-session transport** over shelling out to `claude -p` in the same process:
-
-1. Write a portable `workflow.js` (no host APIs inside it).
-2. Run with **`omw run workflow.js --agent in-session`** or **`--agent auto`**
-   (auto picks in-session when `probeInSessionHost()` finds a callback — today:
-   Kiro's subagent tool — else falls through to installed CLIs).
-3. Or call **`runInSessionWorkflow()`** from the `oh-my-workflow/in-session`
-   export in a tiny host runner — probe → `makeRuntime` → run; **no CLI
-   subprocess fallback**; exit `3` with `in_session_unavailable` when no host.
+The CLI is headless-only; do not pass `--agent in-session`. An embedder with a
+host callback can call `runInSessionWorkflow()` with an explicit adapter:
 
 ```ts
 import { runInSessionWorkflow } from "oh-my-workflow/in-session";
+import { makeInSessionAdapter } from "oh-my-workflow/adapters/in-session";
 
 const outcome = await runInSessionWorkflow(
   { wfPath: "./workflow.js", args: { q: "…" }, strictResume: true },
-  { stderr: (line) => process.stderr.write(line) },
+  { adapter: makeInSessionAdapter({ invoke: hostAgent }) },
 );
 // outcome.exitCode === 0 → parse outcome.stdout; else read outcome.error
 ```
 
-For hosts without a built-in probe, wire `makeInSessionAdapter({ invoke })` and
-map `invoke(req)` (and `req.sessionId` on follow-ups) to the host's subagent API.
-See `oh-my-workflow/adapters/in-session-probe` to extend detection.
+Map `invoke(req)` and `req.sessionId` on follow-ups to the host API. A custom
+`probe` is also accepted, but `runInSessionWorkflow()` does not auto-probe.
 
 Do not put host-specific APIs in `workflow.js`. The same file must still run under
 `omw run workflow.js --agent fake|claude|codex`.
@@ -526,9 +518,9 @@ agent/subagent callback directly.
 | adapter | status | invoke | structured out | in-session follow-up |
 |---|---|---|---|---|
 | **fake** | built-in, free, deterministic | in-process fixtures | as scripted | yes (fixture session) |
-| **in-session** | **host probe** (Kiro today) | `probeInSessionHost()` or injected callback | extracted summary/text | yes (`sessionId` on host) |
-| **claude** | **full** (live-verified, claude 2.1.x) | `claude -p <p> --output-format json --strict-mcp-config` | parse `.result` | `--resume` (same cwd) |
-| **codex** | **experimental** (live-verified, codex 0.137.x) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` (same cwd) |
+| **in-session** | embedder-only | explicit callback adapter | extracted summary/text | yes (`sessionId` on host) |
+| **claude** | supported | `claude -p <p> --output-format json --strict-mcp-config` | parse `.result` | `--resume` (same cwd) |
+| **codex** | **experimental** (dogfood: 0.148.0) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` (same cwd) |
 | **hermes** | **experimental** | `hermes -z <prompt> --yolo` | stdout IS the response (heuristic JSON extract) | — (fresh retries) |
 | **pi** | planned | `pi --print` | stdout | — |
 
@@ -556,10 +548,7 @@ agent/subagent callback directly.
   `--yolo` runs it non-interactively. No in-session followUp (no session id on
   stdout) → schema retries use fresh invokes. No cost field.
 - **pi** isn't wired yet (`--agent pi` → exit 3 with an install hint).
-- **in-session** is not a subprocess adapter. `omw run --agent in-session` (or
-  `auto` when `probeInSessionHost()` succeeds) uses the live host callback; if
-  none is detected → exit `3` with `in_session_unavailable` — **no fallback** to
-  `claude -p`. For manual wiring when probe doesn't know your host yet:
+- **in-session** is not a CLI adapter. Wire it only through the embedder API:
 
   ```ts
   import { makeRuntime } from "oh-my-workflow";
@@ -576,13 +565,13 @@ agent/subagent callback directly.
   const result = await workflow.default(rt, {});
   ```
 
-  Prefer `runInSessionWorkflow()` (see **In-session execution** above) when you
-  want probe + exit codes without reimplementing the CLI runner.
+  Prefer `runInSessionWorkflow()` (see **In-session embedding** above) when you
+  want the normal exit-code contract without reimplementing the runner.
 
 Missing headless CLI → exit `3` with `install_hint`. Run `--agent fake` any time
 for the free path. **`--agent auto`** (default) order: `OMW_AGENT` pin (if set)
-→ **in-session when probed** → host env hints (`CLAUDECODE`, `CODEX_*`, …) →
-first installed CLI among `claude`, `codex`, `hermes`.
+→ host env hints (`CLAUDECODE`, `CODEX_*`, …) → first installed CLI among
+`claude`, `codex`, `hermes`.
 
 ---
 
@@ -654,8 +643,8 @@ but cross-CLI routing is future work). Don't write scripts that assume these.
 
 - Module: `export default async ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result` · optional `export const meta` / `export const fake`. Use `omw codemod <file> --write` to migrate pre-0.5 `(rt, args)` scripts.
 - Path resolves a directory to `workflow.js` / `workflow.ts` / `index.js` / `index.ts`.
-- `omw run <wf> [--agent <auto|in-session|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]`
-- `runInSessionWorkflow({ wfPath, args?, concurrency?, budget?, strictResume?, strict? })` — `oh-my-workflow/in-session`; exit `3` when no host probe.
+- `omw run <wf> [--agent <auto|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]`
+- `runInSessionWorkflow(opts, { adapter | probe })` — embedder-only `oh-my-workflow/in-session`; exit `3` when neither is supplied.
 - `omw replay <journal.jsonl> [--json]`
 - `omw validate <wf> [--json]` — pre-flight: load + fake-fixture lint, no agents spawned.
 - `omw codemod <file> [--to-di] [--write]` — migrate a legacy `(rt, args)` workflow to destructured DI.

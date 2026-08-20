@@ -5,8 +5,8 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun&logoColor=000)](https://bun.sh)
 
-> **Run independent coding-agent repo checks in parallel and return one
-> shape-validated artifact — with explicit receipts when a check fails.**
+> **Run independent coding-agent repo checks in parallel, assemble one artifact
+> from shape-validated node outputs, and write explicit failure receipts.**
 
 **omw** runs `claude -p` or `codex exec` as nodes in a plain-JS workflow. It
 validates output shape, journals each attempt, and leaves completeness policy in

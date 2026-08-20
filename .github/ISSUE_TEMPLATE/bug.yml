@@ -29,7 +29,7 @@ body:
     id: version
     attributes:
       label: omw version
-      placeholder: "0.4.1 (bunx oh-my-workflow --version or package.json)"
+      placeholder: "0.5.0 (package.json or your lockfile)"
     validations:
       required: true
 

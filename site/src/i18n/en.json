@@ -2,7 +2,7 @@
   "lang": "en",
   "meta": {
     "title": "oh-my-workflow — parallel repo checks through coding-agent CLIs",
-    "desc": "Run independent coding-agent repo checks in parallel and return one shape-validated artifact with failure receipts."
+    "desc": "Run independent coding-agent repo checks in parallel, assemble one result from shape-validated node outputs, and journal failures."
   },
   "footer": "plain-JS workflows for coding-agent CLIs",
   "nav": {
@@ -14,7 +14,7 @@
   },
   "landing": {
     "pill": "parallel repo checks, one shaped result",
-    "tagline": "Run independent checks through <code>claude -p</code> or <code>codex exec</code>, validate each output's shape, and keep an explicit receipt when a node fails.",
+    "tagline": "Run independent checks through <code>claude -p</code> or <code>codex exec</code>, assemble one result from shape-validated node outputs, and journal every failure.",
     "ctaPrimary": "Quickstart — no API key",
     "ctaSecondary": "View source",
     "twinHeading": "A small, familiar authoring shape",
@@ -32,8 +32,8 @@
     "colNotes": "notes",
     "adapters": [
       { "name": "fake", "status": "built-in", "kind": "full", "notes": "no-key deterministic demo + test double" },
-      { "name": "claude", "status": "full", "kind": "full", "notes": "JSON output + --resume powers in-session schema self-repair" },
-      { "name": "codex", "status": "experimental", "kind": "exp", "notes": "tolerates malformed JSONL, fails actionably" },
+      { "name": "claude", "status": "supported", "kind": "full", "notes": "JSON output + --resume schema repair" },
+      { "name": "codex", "status": "experimental", "kind": "exp", "notes": "0.148.0 dogfood; usage receipts parsed from JSONL" },
       { "name": "hermes", "status": "experimental", "kind": "exp", "notes": "one-shot; schema retries go fresh" },
       { "name": "pi", "status": "planned", "kind": "plan", "notes": "not wired yet" }
     ]
@@ -41,9 +41,9 @@
   "docs": {
     "crumb": "Start / Introduction",
     "title": "Introduction",
-    "intro": "oh-my-workflow (omw) runs whole coding-agent CLIs as nodes in a plain-JS workflow. It is built for independent repo checks that run in parallel and return one shape-validated result with explicit failure receipts.",
+    "intro": "oh-my-workflow (omw) runs whole coding-agent CLIs as nodes in a plain-JS workflow. It is built for independent repo checks that run in parallel and assemble one result from shape-validated node outputs while journaling failures.",
     "quickstartHeading": "Quickstart",
-    "quickstartBody": "No API key, no network — the built-in fake adapter runs the whole spine:",
+    "quickstartBody": "The built-in fake adapter needs no API key or agent network call; cloning and installing still use the network:",
     "hooksHeading": "The hooks",
     "hookAgentBody": "Run one coding-agent CLI node. With a schema, omw validates and re-prompts the node with the errors up to 2×. Never throws (the null-contract) — except budget exhaustion.",
     "hookFlowBody": "Per-item flow vs. barrier. Default to pipeline.",

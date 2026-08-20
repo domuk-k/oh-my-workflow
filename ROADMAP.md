@@ -9,8 +9,8 @@
 ## Architecture north star
 
 Plain-JS workflows, thin `AgentPort` adapters, and `omw run` as the shell boundary.
-The narrow job is parallel coding-agent repo checks with one shape-validated result
-and explicit partial-failure receipts.
+The narrow job is parallel coding-agent repo checks with one result assembled from
+shape-validated node outputs and explicit partial-failure receipts in the journal.
 
 ## Vision
 
