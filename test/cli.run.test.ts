@@ -157,9 +157,9 @@ describe("runWorkflow", () => {
   test("runs a workflow against fake adapter; result JSON to stdout, journal bracketed", async () => {
     const lines: string[] = [];
     const loaded = {
-      workflow: async (rt: any, args: any) => {
-        rt.phase("Greet");
-        const x = await rt.agent("hi");
+      workflow: async ({ phase, agent }: any, args: any) => {
+        phase("Greet");
+        const x = await agent("hi");
         return { x, args };
       },
       fake: { default: { text: "yo" } },
@@ -255,10 +255,10 @@ describe("runWorkflow", () => {
     // contract that agent() never throws and the run still completes green.
     const lines: string[] = [];
     const loaded = {
-      workflow: async (rt: any) => {
-        rt.phase("Search");
-        const searched = await rt.parallel(
-          ["a", "b", "c"].map((t) => () => rt.agent(`SEARCH ${t}`, { label: `search:${t}` })),
+      workflow: async ({ phase, parallel, agent }: any) => {
+        phase("Search");
+        const searched = await parallel(
+          ["a", "b", "c"].map((t) => () => agent(`SEARCH ${t}`, { label: `search:${t}` })),
         );
         return { found: searched.filter(Boolean) };
       },
@@ -303,8 +303,8 @@ describe("runWorkflow", () => {
   });
 });
 
-describe("runWorkflow — authoring surface (destructured DI + legacy bridge)", () => {
-  test("a destructured-DI workflow runs and a legacy (rt,args) workflow runs with a deprecation notice", async () => {
+describe("runWorkflow — authoring surface", () => {
+  test("a destructured-DI workflow runs and a legacy (rt,args) workflow is rejected with a codemod path", async () => {
     const errs: string[] = [];
     const di = {
       workflow: async ({ agent }: any, args: any) => ({ di: await agent("go"), args }),
@@ -340,8 +340,9 @@ describe("runWorkflow — authoring surface (destructured DI + legacy bridge)", 
         stderr: (s) => errs.push(s),
       },
     );
-    expect(out2.exitCode).toBe(0);
-    expect(errs.join("")).toContain("deprecat");
+    expect(out2.exitCode).toBe(1);
+    expect((out2.error as any).error).toBe("legacy_workflow_unsupported");
+    expect((out2.error as any).message).toContain("omw codemod");
   });
 
   test("a NAMED destructured-DI workflow is not misflagged as legacy (no deprecation)", async () => {
@@ -582,9 +583,9 @@ describe("runWorkflow — --strict determinism sandbox", () => {
 
 describe("runWorkflow — resume passthrough", () => {
   test("deps.resume serves a cached hit: the adapter is never invoked", async () => {
-    const workflow = async (rt: any) => {
-      rt.phase("Greet");
-      const x = await rt.agent("hi");
+    const workflow = async ({ phase, agent }: any) => {
+      phase("Greet");
+      const x = await agent("hi");
       return { x };
     };
 
@@ -699,8 +700,8 @@ describe("runWorkflow — internal_error escalation", () => {
     const loaded = {
       // An invalid JSON Schema makes the gate's validator fail to compile →
       // internal_error (an author bug), distinct from a flaky node.
-      workflow: async (rt: any) => {
-        const x = await rt.agent("compute", { schema: { type: "bogus-not-a-type" } });
+      workflow: async ({ agent }: any) => {
+        const x = await agent("compute", { schema: { type: "bogus-not-a-type" } });
         return { x };
       },
       fake: { default: { text: '{"n":1}' } },
@@ -728,7 +729,7 @@ describe("runWorkflow — internal_error escalation", () => {
 
   test("a normal flaky-node failure stays exit 0 (null-contract intact)", async () => {
     const loaded = {
-      workflow: async (rt: any) => ({ x: await rt.agent("compute", { schema: { type: "object" } }) }),
+      workflow: async ({ agent }: any) => ({ x: await agent("compute", { schema: { type: "object" } }) }),
       fake: { default: { fail: "timeout" as const } },
     };
     const outcome = await runWorkflow(

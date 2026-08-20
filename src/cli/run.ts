@@ -179,7 +179,7 @@ export async function loadWorkflow(wfPath: string): Promise<LoadedWorkflow> {
   const mod = await import(entry);
   if (typeof mod.default !== "function") {
     throw new Error(
-      `workflow ${wfPath} must default-export a function ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result (legacy (rt, args) still supported)`,
+      `workflow ${wfPath} must default-export a function ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result`,
     );
   }
   return { workflow: mod.default, fake: mod.fake, meta: mod.meta };
@@ -210,18 +210,14 @@ export type RunOutcome = {
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
-/** True when a workflow's first param is NOT an object-destructuring pattern,
- *  i.e. the legacy positional `(rt, args)` shape. Used only to emit a
- *  deprecation nudge — never to dispatch, since the same object satisfies both
- *  contracts. A source sniff via Function.prototype.toString; heuristic by
- *  nature (it can't see through a bound/wrapped fn), but a non-fatal warning is
- *  the right altitude for a heuristic. */
+/** True when a workflow's first param is not an object-destructuring pattern. */
 function isLegacyShape(fn: Function): boolean {
   const src = Function.prototype.toString.call(fn);
-  // New shape = first param is an object-destructuring pattern. Allow an optional
-  // function NAME between `function` and `(` (e.g. `function deepResearch({…})`),
-  // else a named destructured default export is misflagged as legacy.
-  return !/^\s*(async\s+)?function\s*\*?\s*[A-Za-z0-9_$]*\s*\(\s*\{|^\s*\(\s*\{|^\s*async\s*\(\s*\{/.test(src);
+  const first =
+    src.match(/^\s*(?:async\s+)?function\s*\*?\s*[A-Za-z0-9_$]*\s*\(\s*([^,)]*)/)?.[1] ??
+    src.match(/^\s*(?:async\s*)?\(\s*([^,)]*)/)?.[1] ??
+    src.match(/^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/)?.[1];
+  return first !== undefined && first.trim() !== "" && !first.trim().startsWith("{");
 }
 
 /** Run `fn` with Date/Math.random frozen to throw, restoring them after (even on
@@ -294,6 +290,17 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
     return { exitCode: 1, error: { error: "load_failed", message: errMsg(e), wf: opts.wfPath } };
   }
 
+  if (isLegacyShape(loaded.workflow)) {
+    return {
+      exitCode: 1,
+      error: {
+        error: "legacy_workflow_unsupported",
+        message: "positional `(rt, args)` workflows were removed in 0.5; run `omw codemod <file> --write`",
+        wf: opts.wfPath,
+      },
+    };
+  }
+
   const resolved = deps.resolveAdapter(opts.agent, loaded);
   if ("missing" in resolved) {
     return {
@@ -326,6 +333,9 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
       if (depth >= 1) throw new Error("workflow() nesting is one level only");
       const childPath = typeof ref === "string" ? ref : ref.scriptPath;
       const childLoaded = await deps.loadWorkflow(childPath);
+      if (isLegacyShape(childLoaded.workflow)) {
+        throw new Error(`child workflow ${childPath} uses removed positional \`(rt, args)\` authoring; run \`omw codemod ${childPath} --write\``);
+      }
       const childRt = makeRuntime({
         adapter: resolved.adapter,
         journal,
@@ -342,17 +352,9 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
 
   journal.runStart({ run: runId, wf: opts.wfPath });
   try {
-    // The SAME runtime object satisfies both authoring contracts: a legacy
-    // `(rt, args)` script reads `rt.agent`, a new `({ agent }, args)` script
-    // destructures it. No execution-time dispatch — only the deprecation nudge
-    // needs to detect the legacy positional shape. `workflow` is layered on here
-    // (not in makeRuntime) since nesting needs the loader + resolved adapter.
+    // `workflow` is layered on here (not in makeRuntime) since nesting needs the
+    // loader + resolved adapter.
     const hooks = { ...rt, workflow: makeWorkflowHook(0) };
-    if (isLegacyShape(loaded.workflow)) {
-      deps.stderr?.(
-        "omw: deprecation — positional `rt` authoring is deprecated; destructure hooks `({ agent, ... }, args)`. Removed in 0.5. Run `omw codemod`.\n",
-      );
-    }
     const result = await withStrict(opts.strict, () => loaded.workflow(hooks, opts.args));
     // internal_error is an AUTHOR bug (e.g. a JSON Schema that won't compile),
     // not a flaky node — the null-contract absorbs it so the run completes, but
@@ -548,7 +550,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
     now: () => Date.now(),
     runId: () => runId,
     resume,
-    stderr: io.stderr, // surface the legacy-authoring deprecation nudge to the user
+    stderr: io.stderr,
   });
 
   if (outcome.stdout !== undefined) io.stdout(outcome.stdout + "\n");
