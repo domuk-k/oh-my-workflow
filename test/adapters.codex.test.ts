@@ -89,6 +89,8 @@ describe("makeCodexAdapter (injected spawn)", () => {
     expect(calls[0]).toContain("--json");
     expect(calls[0]).toContain("say pong");
     expect(calls[0]).toContain("-s"); // sandbox flag present
+    expect(calls[0]).toContain("--ignore-user-config");
+    expect(calls[0]).toContain("--ignore-rules");
   });
 
   test("invoke passes -m <model> when requested", async () => {
@@ -167,15 +169,16 @@ describe("makeCodexAdapter (injected spawn)", () => {
     expect(r.stderr).toContain("--budget");
   });
 
-  test("warns once when inheritMcp is requested but not implemented", async () => {
-    const warnings: string[] = [];
+  test("inheritMcp opts back into user config instead of adding isolation flags", async () => {
+    const calls: string[][] = [];
     const adapter = makeCodexAdapter({
-      warn: (m) => warnings.push(m),
-      spawn: async () => ({ code: 0, stdout: goldenJsonl, stderr: "" }),
+      spawn: async (args) => {
+        calls.push(args);
+        return { code: 0, stdout: goldenJsonl, stderr: "" };
+      },
     });
     await adapter.invoke({ prompt: "x", inheritMcp: true });
-    await adapter.invoke({ prompt: "y", inheritMcp: true });
-    expect(warnings.length).toBe(1);
-    expect(warnings[0]).toContain("inheritMcp");
+    expect(calls[0]).not.toContain("--ignore-user-config");
+    expect(calls[0]).not.toContain("--ignore-rules");
   });
 });

@@ -44,7 +44,7 @@ export type InvokeRequest = {
    *  is the dominant per-node latency in a fan-out, and inheriting them makes a
    *  workflow non-reproducible (it behaves differently per machine). A coding-agent
    *  node rarely needs them. Honored by the claude adapter (--strict-mcp-config);
-   *  the codex adapter does not yet implement isolation, so it is a no-op there. */
+   *  codex uses `--ignore-user-config --ignore-rules` unless this is true. */
   inheritMcp?: boolean;
   /** Reasoning-effort hint, passed through to adapters that support it. Adapters
    *  with no faithful flag (e.g. claude -p today) drop it and warn once. */

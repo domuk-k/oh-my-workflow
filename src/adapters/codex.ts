@@ -163,17 +163,19 @@ export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
     name: "codex",
     invoke(req: InvokeRequest): Promise<AgentResult> {
       const args = ["exec", "--json", "-s", sandbox];
+      if (!req.inheritMcp) args.push("--ignore-user-config", "--ignore-rules");
       if (req.model) args.push("-m", req.model);
-      if (req.inheritMcp) warnUnmapped("inheritMcp", req.inheritMcp);
       if (req.effort !== undefined) warnUnmapped("effort", req.effort);
       if (req.agentType !== undefined) warnUnmapped("agentType", req.agentType);
       args.push(req.prompt);
       return run(args, req.cwd, req.timeoutMs, req.requireOutputTokens);
     },
-    // `cwd` must match the original invoke so resume finds the session.
-    // (MCP isolation / inheritMcp is not yet implemented for codex.)
+    // `cwd` and config isolation must match the original invoke so resume finds
+    // the session without silently loading a different ambient environment.
     followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
-      const args = ["exec", "resume", sessionId, "--json", "-s", sandbox, prompt];
+      const args = ["exec", "resume", sessionId, "--json"];
+      if (!opts?.inheritMcp) args.push("--ignore-user-config", "--ignore-rules");
+      args.push(prompt);
       return run(args, opts?.cwd, opts?.timeoutMs, opts?.requireOutputTokens);
     },
   };

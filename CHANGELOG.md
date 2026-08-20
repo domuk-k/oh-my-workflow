@@ -9,6 +9,8 @@ All notable changes to this project are documented here. This project adheres to
 
 - Codex `turn.completed.usage.output_tokens` now reaches runtime accounting.
   Budgeted Codex nodes fail explicitly when the CLI omits that usage receipt.
+- Codex nodes ignore ambient user config and execpolicy rules by default; opt in
+  explicitly with `inheritMcp`.
 - `--strict` now preserves the runtime's own journal clock while still rejecting
   workflow calls to `Date.now()`.
 - Nested workflows share the run-wide concurrency limiter.
