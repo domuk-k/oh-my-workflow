@@ -1,6 +1,6 @@
 // withWorktree against a REAL temp git repo: it must create an ephemeral
 // worktree, run the body there, and remove it afterward when left unchanged.
-// A non-git dir must fall back to running in place with a warning.
+// A non-git dir must fail closed rather than running an isolated node in place.
 
 import { test, expect, describe } from "bun:test";
 import { mkdtempSync, writeFileSync, existsSync, readdirSync } from "node:fs";
@@ -38,20 +38,11 @@ describe("withWorktree", () => {
     expect(existsSync(captured)).toBe(false); // removed after the body returned clean
   });
 
-  test("a non-git dir runs the body in place and warns", async () => {
+  test("a non-git dir fails closed without running the body", async () => {
     const plain = mkdtempSync(join(tmpdir(), "omw-plain-"));
-    const warns: string[] = [];
-    let captured = "";
-    await withWorktree(
-      plain,
-      async (d) => {
-        captured = d;
-        return null;
-      },
-      { warn: (m) => warns.push(m) },
-    );
-    expect(captured).toBe(plain); // fell back to running in place
-    expect(warns.join("")).toContain("not a git repo");
+    let ran = false;
+    await expect(withWorktree(plain, async () => { ran = true; return null; })).rejects.toThrow("refusing to run");
+    expect(ran).toBe(false);
   });
 
   test("cleanup failure does not replace a successful node result", async () => {

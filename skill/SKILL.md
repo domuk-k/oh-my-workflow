@@ -142,7 +142,8 @@ const out = await agent("SCOPE the question into topics", {
   a one-time warn** (honest-scope) rather than silently pretending.
 - `isolation: "worktree"` gives the node its own ephemeral `git worktree` as cwd,
   so parallel file-mutating nodes don't clobber each other; the worktree is
-  auto-removed if the node left it clean. A non-git cwd runs in place with a warn.
+  auto-removed if the node left it clean. A non-git cwd or failed worktree setup
+  fails closed to `null` with an `internal_error` receipt.
 
 ### `parallel(thunks) => Promise<any[]>` — barrier
 

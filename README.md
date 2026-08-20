@@ -24,6 +24,9 @@ bunx oh-my-workflow@0.5.0 run examples/deep-research --agent fake
 {"confirmed":[{"topic":"a","hits":3,"verified":true},{"topic":"c","hits":5,"verified":true}],"summary":{"summary":"done","count":2}}
 ```
 
+The fixture deliberately times out topic `b`; the result stays green but omits
+that topic, and the journal records the dropped node.
+
 Fan-out, schema self-repair, timeout handling — one pass, deterministic:
 
 ```sh

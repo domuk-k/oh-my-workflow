@@ -2,9 +2,8 @@
 // When several nodes mutate files in parallel they would clobber each other in a
 // shared checkout; giving each its own `git worktree` isolates them. The worktree
 // is auto-removed when the node left it unchanged, and LEFT IN PLACE (with a warn)
-// when it has changes, so a caller can inspect/merge them. A non-git cwd has no
-// worktree to make — we run in place and warn rather than fail (honest-scope:
-// isolation is best-effort, the null-contract still holds).
+// when it has changes, so a caller can inspect/merge them. Isolation is fail-closed:
+// a non-git cwd or failed worktree creation rejects and the runtime records null.
 
 import { join } from "node:path";
 
@@ -46,15 +45,13 @@ export async function withWorktree<T>(
 
   const top = await spawn(["rev-parse", "--show-toplevel"], repoCwd);
   if (top.code !== 0) {
-    warn(`omw(worktree): ${repoCwd} is not a git repo; running the node in place.`);
-    return fn(repoCwd);
+    throw new Error(`omw(worktree): ${repoCwd} is not a git repo; refusing to run an isolated node in place`);
   }
 
   const dir = join(repoCwd, ".omw-worktrees", `wt-${process.pid}-${++wtCounter}`);
   const add = await spawn(["worktree", "add", "--detach", dir], repoCwd);
   if (add.code !== 0) {
-    warn(`omw(worktree): \`git worktree add\` failed (${add.stderr.trim()}); running in place.`);
-    return fn(repoCwd);
+    throw new Error(`omw(worktree): \`git worktree add\` failed (${add.stderr.trim()})`);
   }
 
   try {

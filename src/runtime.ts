@@ -39,8 +39,8 @@ export type AgentOpts = {
   /** Cross-vendor node profile (named agent persona) for this node. */
   agentType?: string;
   /** Run this node in a fresh ephemeral git worktree (cwd = the worktree), so
-   *  parallel file-mutating nodes don't clobber each other. Best-effort: a
-   *  non-git cwd runs in place with a warning. */
+   *  parallel file-mutating nodes don't clobber each other. Fails closed when
+   *  the cwd is not a git repository or the worktree cannot be created. */
   isolation?: "worktree";
 };
 
@@ -236,14 +236,16 @@ export function makeRuntime(deps: {
       }
     }
 
-    // Budget ceiling: checked AFTER the resume short-circuit (a cached hit costs
-    // nothing) and OUTSIDE limit()'s try, so it propagates as the one sanctioned
-    // null-contract exception rather than being swallowed to null.
-    if (budgetTotal != null && budgetState.spent >= budgetTotal) {
-      throw new BudgetExceededError(`budget exhausted: ${budgetState.spent}/${budgetTotal} tokens`);
-    }
-
     return limit(async () => {
+      // Check on limiter admission, not before queueing: otherwise every queued
+      // node could pass while spend was still zero. Close the journal span before
+      // propagating the one sanctioned agent() exception.
+      if (budgetTotal != null && budgetState.spent >= budgetTotal) {
+        const message = `budget exhausted: ${budgetState.spent}/${budgetTotal} tokens`;
+        journal.agentEnd({ call, ok: false, kind: "budget_exhausted", error: message, durationMs: 0 });
+        throw new BudgetExceededError(message);
+      }
+
       // The node body, parameterized by the effective working directory so an
       // isolation:'worktree' node runs the SAME logic with cwd = the worktree.
       const body = async (effCwd: string | undefined): Promise<unknown | null> => {

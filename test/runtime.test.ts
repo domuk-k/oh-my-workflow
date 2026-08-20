@@ -608,6 +608,9 @@ describe("runtime.budget — token accounting", () => {
     const rt = makeRuntime({ adapter, journal, budget: 50 });
     await rt.agent("first"); // spends 60 ≥ 50 after this
     await expect(rt.agent("second")).rejects.toBeInstanceOf(BudgetExceededError);
+    expect(journal.events()).toContainEqual(
+      expect.objectContaining({ ev: "agent_end", call: 2, ok: false, kind: "budget_exhausted" }),
+    );
   });
 
   test("failed nodes that report output tokens still count toward budget (a failing-node loop terminates)", async () => {
@@ -648,5 +651,19 @@ describe("runtime.budget — token accounting", () => {
     await rt.agent("warmup").catch(() => {});
     const res = await rt.parallel([() => rt.agent("a")]);
     expect(res).toEqual([null]);
+  });
+
+  test("queued nodes recheck budget on limiter admission", async () => {
+    let calls = 0;
+    const adapter: AgentPort = {
+      name: "counting",
+      async invoke() {
+        calls++;
+        return { ok: true, text: "x", meta: { durationMs: 0, outputTokens: 10 } };
+      },
+    };
+    const rt = makeRuntime({ adapter, journal: makeJournal({ now: () => 0 }), budget: 10, concurrency: 1 });
+    expect(await rt.parallel([() => rt.agent("a"), () => rt.agent("b"), () => rt.agent("c")])).toEqual(["x", null, null]);
+    expect(calls).toBe(1);
   });
 });
