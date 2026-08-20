@@ -1,0 +1,18 @@
+name: dogfood
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  relaunch-audit-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: >-
+          bun src/cli/omw.ts run .github/omw/relaunch-audit.ts
+          --agent fake --concurrency 3 --budget 1000
+          --args '{"mode":"ci"}'

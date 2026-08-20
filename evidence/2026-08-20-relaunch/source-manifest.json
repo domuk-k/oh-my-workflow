@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-08-20T10:11:20Z",
+  "sources": [
+    {
+      "id": "claude-subagents",
+      "publisher": "Anthropic",
+      "title": "Create custom subagents",
+      "canonicalUrl": "https://code.claude.com/docs/en/sub-agents",
+      "retrievedUrl": "https://code.claude.com/docs/en/sub-agents.md",
+      "revision": null,
+      "inputFile": "claude-code-subagents.md",
+      "bytes": 102648,
+      "sha256": "6f51d2b55ae01c0a9c4915788ba0969d99130634512968d870f3b08e8860e5a5"
+    },
+    {
+      "id": "codex-cli",
+      "publisher": "OpenAI",
+      "title": "Codex CLI",
+      "canonicalUrl": "https://developers.openai.com/codex/cli",
+      "retrievedUrl": "https://developers.openai.com/codex/cli",
+      "revision": null,
+      "inputFile": "codex-cli.html",
+      "bytes": 367623,
+      "sha256": "c395f5fe0ffde99b26ea18069350b22aa90475e31b3e8a985ab52386155c7478"
+    },
+    {
+      "id": "langgraph-workflows-agents",
+      "publisher": "LangChain",
+      "title": "Workflows and agents",
+      "canonicalUrl": "https://docs.langchain.com/oss/python/langgraph/workflows-agents",
+      "retrievedUrl": "https://raw.githubusercontent.com/langchain-ai/docs/e6a66534c2655283f5d799e33e93ace48b4b27b8/src/oss/langgraph/workflows-agents.mdx",
+      "revision": "e6a66534c2655283f5d799e33e93ace48b4b27b8",
+      "inputFile": "langgraph-workflows-agents.mdx",
+      "bytes": 61669,
+      "sha256": "074b30abdacf6ac2b9a68fb684928efe874b9960ca6f129ec75cdb310396b191"
+    }
+  ]
+}
