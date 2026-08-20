@@ -48,7 +48,7 @@ though you can opt into a determinism sandbox with `--strict`.
 
 ```sh
 bunx github:domuk-k/oh-my-workflow run examples/deep-research --agent fake
-# → {"confirmed":[…],"summary":{…}}    exit 0 · no key · no cost · deterministic
+# → {"confirmed":[…],"summary":{…}}    exit 0 · no key · no agent-API usage cost · deterministic
 ```
 
 > Tip: the GitHub source keeps the skill and runtime aligned before a new npm
@@ -467,8 +467,8 @@ load/fixture problem.
    JavaScript modules; TypeScript is optional, but `.js` is the most portable
    artifact across coding-agent hosts. Keep host-specific in-session glue in a
    separate runner, never inside the workflow file.
-2. **Build on the null-contract.** `agent()` returns `null`, never throws (except
-   `BudgetExceededError` at the ceiling). `.filter(Boolean)` after every
+2. **Build on the null-contract.** Ordinary node failures return `null`; budget
+   exhaustion and journal I/O remain run errors. `.filter(Boolean)` after every
    `parallel`/`pipeline`. For votes, require a quorum of *cast* (non-null) results
    so all-abstain can't pass.
 3. **Always pass a `schema` when you need structured data.** The gate's
@@ -651,4 +651,4 @@ but cross-CLI routing is future work). Don't write scripts that assume these.
 - `omw skill install [--codex|--opencode] [--project]` — install this skill for a coding agent.
 - exit codes: `0` ok · `1` script/load error (incl. budget ceiling) · `2` usage · `3` adapter missing · `4` completed but a node hit `internal_error` (author bug; result still on stdout).
 - stdout = result JSON · journal = `.omw/<runId>.jsonl` · `--pretty` tree = stderr.
-- `agent()` never throws (except `BudgetExceededError`) → `filter(Boolean)`; quorum of cast votes for verify-vote.
+- ordinary node failure → `null` → `filter(Boolean)`; budget/journal failures stop the run; quorum of cast votes for verify-vote.

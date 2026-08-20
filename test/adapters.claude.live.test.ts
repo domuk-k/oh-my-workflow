@@ -15,11 +15,13 @@ test.skipIf(!LIVE)(
     const r = await adapter.invoke({
       prompt: "Reply with exactly the single word: pong",
       timeoutMs: 60_000,
+      requireOutputTokens: true,
     });
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error(`expected ok, got ${r.kind}: ${r.stderr}`);
     expect(r.text.toLowerCase()).toContain("pong");
     expect(typeof r.meta.sessionId).toBe("string");
+    expect(typeof r.meta.outputTokens).toBe("number");
   },
   70_000,
 );

@@ -62,7 +62,7 @@ describe("skillCommand install", () => {
     expect(existsSync(dest)).toBe(true);
     expect(readFileSync(dest, "utf8")).toBe("BODY-V1");
     expect(a.out()).toContain("installed");
-    expect(a.out()).toContain("/omw <your task>");
+    expect(a.out()).toContain("use oh-my-workflow to <your task>");
     expect(a.out()).not.toContain("updated");
 
     // re-run is idempotent and refreshes content

@@ -22,6 +22,8 @@ All notable changes to this project are documented here. This project adheres to
   `maxRetries` becomes an explicit internal-error receipt without invoking an agent.
 - Worktree setup failures stay inside the node null-contract, and cleanup errors
   no longer replace a successful node result.
+- Budgeted Claude calls now fail closed when `usage.output_tokens` is absent,
+  and non-zero JSON results preserve any reported output-token receipt.
 
 ### Changed (breaking)
 

@@ -1,10 +1,10 @@
 // makeRuntime assembles the 5 hooks over an injected AgentPort + journal — this
 // is the whole core. The orchestration script the host agent writes is plain JS;
 // these hooks are the only surface it touches. The load-bearing invariant is the
-// null-contract: agent() NEVER throws; a terminal failure resolves to null and a
-// journal entry carrying the failure `kind`, so the authoring agent can read its
-// own failure and repair its own script. Workflow patterns (filter(Boolean),
-// abstain quorums) stand on top of that contract.
+// null-contract: an ordinary node failure resolves to null and a journal entry
+// carrying the failure `kind`, so the authoring agent can read its own failure
+// and repair its own script. Budget exhaustion and journal I/O remain explicit
+// run errors. Workflow patterns (filter(Boolean), abstain quorums) build on this.
 
 import type { AgentPort, AgentResult } from "./adapters/types";
 import type { Journal } from "./journal";

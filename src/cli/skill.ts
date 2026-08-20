@@ -120,7 +120,7 @@ export async function skillCommand(argv: string[], io: SkillIo): Promise<number>
   io.stdout(
     `${updating ? "updated" : "installed"} ${SKILL_NAME} skill → ${dest}\n` +
       `${parsed.project ? "This project's" : discovers} agent auto-discovers skills here.\n` +
-      `Next: ask your coding agent with "/omw <your task>".\n`,
+      `Next: ask your coding agent to "use oh-my-workflow to <your task>".\n`,
   );
   return 0;
 }

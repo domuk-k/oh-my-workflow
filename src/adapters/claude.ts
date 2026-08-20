@@ -112,7 +112,7 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
     warn(`omw(claude): \`${field}\` (=${String(value)}) has no claude -p flag; dropped for this run.`);
   };
 
-  async function run(args: string[], cwd?: string, timeoutMs?: number): Promise<AgentResult> {
+  async function run(args: string[], cwd?: string, timeoutMs?: number, requireOutputTokens?: boolean): Promise<AgentResult> {
     let res: ClaudeSpawnResult;
     try {
       res = await spawn(args, { cwd, timeoutMs });
@@ -124,19 +124,24 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
     if (res.timedOut) {
       return { ok: false, kind: "timeout", stderr: res.stderr || `timed out after ${timeoutMs}ms`, meta: { durationMs: 0 } };
     }
-    if (res.code !== 0) {
-      return {
-        ok: false,
-        kind: "nonzero_exit",
-        stderr: res.stderr || res.stdout || `claude exited ${res.code}`,
-        meta: { durationMs: 0 },
-      };
-    }
-
     let json: unknown;
     try {
       json = JSON.parse(res.stdout);
     } catch {
+      json = undefined;
+    }
+
+    if (res.code !== 0) {
+      const parsed = json === undefined ? undefined : parseClaudeResult(json);
+      return {
+        ok: false,
+        kind: "nonzero_exit",
+        stderr: res.stderr || (!parsed?.ok ? parsed?.stderr : undefined) || res.stdout || `claude exited ${res.code}`,
+        meta: parsed?.meta ?? { durationMs: 0 },
+      };
+    }
+
+    if (json === undefined) {
       return {
         ok: false,
         kind: "nonzero_exit",
@@ -144,7 +149,16 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
         meta: { durationMs: 0 },
       };
     }
-    return parseClaudeResult(json);
+    const parsed = parseClaudeResult(json);
+    if (requireOutputTokens && parsed.meta?.outputTokens === undefined) {
+      return {
+        ok: false,
+        kind: "nonzero_exit",
+        stderr: "claude did not report usage.output_tokens; --budget is unsupported for this run",
+        meta: { durationMs: parsed.meta?.durationMs ?? 0 },
+      };
+    }
+    return parsed;
   }
 
   return {
@@ -157,7 +171,7 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
       // Isolate the node from the host's MCP servers unless asked otherwise:
       // booting figma/devtools/etc. on every node is the dominant fan-out latency.
       if (!req.inheritMcp) args.push("--strict-mcp-config");
-      return run(args, req.cwd, req.timeoutMs);
+      return run(args, req.cwd, req.timeoutMs, req.requireOutputTokens);
     },
     // `cwd` must match the original invoke — claude keys session history by
     // project directory, so resuming elsewhere yields "No conversation found".
@@ -166,7 +180,7 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
     followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
       const args = ["-p", prompt, "--resume", sessionId, "--output-format", "json"];
       if (!opts?.inheritMcp) args.push("--strict-mcp-config");
-      return run(args, opts?.cwd, opts?.timeoutMs);
+      return run(args, opts?.cwd, opts?.timeoutMs, opts?.requireOutputTokens);
     },
   };
 }

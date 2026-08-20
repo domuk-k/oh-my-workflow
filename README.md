@@ -65,7 +65,7 @@ export default async function ({ agent, parallel, phase, budget }, args) {
 
 | Hook | Role |
 |------|------|
-| `agent(prompt, opts?)` | Run one CLI node. With `schema`, validates JSON and **re-prompts on failure** (up to 2 retries). Returns object or `null` — never throws (except budget exhaustion). |
+| `agent(prompt, opts?)` | Run one CLI node. With `schema`, validates JSON and **re-prompts on failure** (up to 2 retries). Ordinary node failures return `null`; budget exhaustion and journal I/O are run errors. |
 | `parallel(thunks)` | Concurrent fan-out; failures → `null`. |
 | `pipeline(items, …stages)` | Per-item staged flow. |
 | `workflow(ref, args?)` | Inline sub-workflow (one level). |

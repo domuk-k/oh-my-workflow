@@ -128,6 +128,20 @@ describe("makeClaudeAdapter (injected spawn)", () => {
     expect(calls[0]).toContain("claude-opus-4-8");
   });
 
+  test("a budgeted invocation fails closed when Claude omits its usage receipt", async () => {
+    const adapter = makeClaudeAdapter({
+      spawn: async () => ({
+        code: 0,
+        stdout: JSON.stringify({ type: "result", subtype: "success", result: "pong", duration_ms: 1 }),
+        stderr: "",
+      }),
+    });
+    const r = await adapter.invoke({ prompt: "x", requireOutputTokens: true });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.stderr).toContain("usage.output_tokens");
+  });
+
   test("effort/agentType are not pushed as claude args (no faithful CLI flag) and warn once", async () => {
     const calls: string[][] = [];
     const warns: string[] = [];
@@ -230,6 +244,18 @@ describe("makeClaudeAdapter (injected spawn)", () => {
     if (r.ok) throw new Error("expected fail");
     expect(r.kind).toBe("nonzero_exit");
     expect(r.stderr).toContain("boom");
+  });
+
+  test("a non-zero JSON result preserves reported output tokens", async () => {
+    const adapter = makeClaudeAdapter({
+      spawn: async () => ({
+        code: 1,
+        stdout: JSON.stringify({ type: "result", subtype: "error_during_execution", is_error: true, result: "boom", duration_ms: 3, usage: { output_tokens: 7 } }),
+        stderr: "",
+      }),
+    });
+    const r = await adapter.invoke({ prompt: "x" });
+    expect(!r.ok && r.meta?.outputTokens).toBe(7);
   });
 
   test("a timed-out spawn -> ok:false timeout (distinct kind), never throws", async () => {
