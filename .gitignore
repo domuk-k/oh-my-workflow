@@ -8,9 +8,5 @@ agent/skills/
 .DS_Store
 .vercel
 
-# Maintainer-local (not published)
-docs/tasks/
-docs/launch/
-docs/research/
-docs/plans/
-docs/specs/*-handoff.md
+# Maintainer-local (not published) — all of docs/ stays on disk only
+docs/

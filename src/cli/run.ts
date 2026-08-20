@@ -11,12 +11,6 @@ import { makeFakeAdapter, type FakeAdapterOptions } from "../adapters/fake";
 import { makeClaudeAdapter } from "../adapters/claude";
 import { makeCodexAdapter } from "../adapters/codex";
 import { makeHermesAdapter } from "../adapters/hermes";
-import {
-  IN_SESSION_UNAVAILABLE_HINT,
-  probeInSessionHost,
-  resolveInSessionAdapter,
-  type InSessionProbeResult,
-} from "../adapters/in-session-probe";
 import type { Runtime, WorkflowMeta } from "../runtime";
 import { makeRuntime } from "../runtime";
 import { makeJournal, parseJournalLines, type JournalEvent } from "../journal";
@@ -398,7 +392,8 @@ const INSTALL_HINTS: Record<string, string> = {
   codex: "npm i -g @openai/codex  (experimental adapter)",
   hermes: "install the Hermes Agent CLI, then `hermes login`  (experimental adapter)",
   pi: "see https://github.com/parallel-ai/pi  (experimental adapter)",
-  "in-session": IN_SESSION_UNAVAILABLE_HINT,
+  "in-session":
+    "in-session is embedder-only — use runInSessionWorkflow() with an explicit adapter (oh-my-workflow/in-session). CLI: omw run --agent claude|codex|fake.",
 };
 
 /** PATH probe — injected so the missing→installed branch is testable. */
@@ -409,14 +404,9 @@ function unique<T>(items: T[]): T[] {
   return [...new Set(items)];
 }
 
-function autoCandidates(
-  env: Record<string, string | undefined>,
-  probe: () => InSessionProbeResult = probeInSessionHost,
-): string[] {
+function autoCandidates(env: Record<string, string | undefined>): string[] {
   const explicit = env.OMW_AGENT?.trim().toLowerCase();
   if (explicit && explicit !== "auto") return [explicit];
-
-  const inHost: string[] = probe().ok ? ["in-session"] : [];
 
   const keys = new Set(Object.keys(env).map((k) => k.toUpperCase()));
   const hostHints: string[] = [];
@@ -430,9 +420,7 @@ function autoCandidates(
     hostHints.push("hermes");
   }
 
-  // In-session first when the host exposes a callback — unify on the live session,
-  // not a subprocess masquerading as the same thing.
-  return unique([...inHost, ...hostHints, ...AUTO_ADAPTERS]);
+  return unique([...hostHints, ...AUTO_ADAPTERS]);
 }
 
 function makeNamedAdapter(name: string, wf: LoadedWorkflow): AgentPort | undefined {
@@ -448,18 +436,11 @@ export function resolveAdapter(
   wf: LoadedWorkflow,
   binExists: (bin: string) => boolean = defaultBinExists,
   env: Record<string, string | undefined> = process.env,
-  probe: () => InSessionProbeResult = probeInSessionHost,
 ): AdapterResolution {
   if (name === "fake") return { adapter: makeFakeAdapter(wf.fake) };
-  if (name === "in-session") return resolveInSessionAdapter(probe);
   if (name === "auto") {
-    const candidates = autoCandidates(env, probe);
+    const candidates = autoCandidates(env);
     for (const candidate of candidates) {
-      if (candidate === "in-session") {
-        const resolved = resolveInSessionAdapter(probe);
-        if ("adapter" in resolved) return resolved;
-        continue;
-      }
       const adapter = makeNamedAdapter(candidate, wf);
       if (candidate === "fake" && adapter) return { adapter };
       if (adapter && binExists(candidate)) return { adapter };
@@ -518,7 +499,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   if (!parsed.ok) {
     io.stderr(JSON.stringify({ error: "usage", message: parsed.error }));
     io.stderr(
-      "\nusage: omw run <workflow> [--agent <auto|in-session|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]",
+      "\nusage: omw run <workflow> [--agent <auto|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]",
     );
     return 2;
   }

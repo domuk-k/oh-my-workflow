@@ -11,9 +11,9 @@ export type InSessionProbeResult =
 
 export const IN_SESSION_UNAVAILABLE_HINT =
   "No in-session host callback detected in this process. " +
-  "For headless runs use --agent claude|codex|fake. " +
-  "For in-host runs use --agent in-session (or --agent auto when a host is present), " +
-  "or wire makeInSessionAdapter({ invoke }) in a tiny host runner.";
+  "Wire makeInSessionAdapter({ invoke }) or makeKiroInSessionAdapter() in a host runner, " +
+  "then call runInSessionWorkflow({ wfPath }, { adapter }). " +
+  "For headless runs use omw run --agent claude|codex|fake.";
 
 /** Detect an in-session host and return a ready adapter, or { ok:false }. */
 export function probeInSessionHost(): InSessionProbeResult {
@@ -28,7 +28,7 @@ export function probeInSessionHost(): InSessionProbeResult {
   return { ok: false, reason: IN_SESSION_UNAVAILABLE_HINT };
 }
 
-/** Resolve --agent in-session: adapter or a structured missing signal (exit 3). */
+/** Resolve an embedder probe: adapter or a structured missing signal (exit 3). */
 export function resolveInSessionAdapter(probe: () => InSessionProbeResult = probeInSessionHost):
   | { adapter: AgentPort }
   | { missing: string; installHint: string } {

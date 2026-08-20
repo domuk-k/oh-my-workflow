@@ -55,26 +55,27 @@ describe("resolveInSessionAdapter", () => {
   });
 });
 
-describe("resolveAdapter — in-session policy", () => {
+describe("resolveAdapter — CLI is headless only", () => {
   const wf = { workflow: async () => ({}) };
 
-  test("--agent in-session is adapter_missing when the host is absent", () => {
-    const r = resolveAdapter("in-session", wf, () => true, {}, () => ({ ok: false, reason: "absent" }));
+  test("--agent in-session is adapter_missing (embedder-only)", () => {
+    const r = resolveAdapter("in-session", wf, () => true, {});
     expect("missing" in r && r.missing).toBe("in-session");
+    if (!("missing" in r)) throw new Error("expected missing");
+    expect(r.installHint).toContain("embedder-only");
   });
 
-  test("auto prefers in-session over installed CLIs when a host callback exists", () => {
+  test("auto ignores in-session even when a host callback exists", () => {
     withKiroTool(() => {
-      const r = resolveAdapter("auto", wf, () => true, {});
-      expect("adapter" in r && r.adapter.name).toBe("in-session");
+      const r = resolveAdapter("auto", wf, (bin) => bin === "claude", {});
+      expect("adapter" in r && r.adapter.name).toBe("claude");
     });
   });
 
-  test("OMW_AGENT=in-session fails cleanly outside a host", () => {
-    const r = resolveAdapter("auto", wf, () => true, { OMW_AGENT: "in-session" }, () => ({
-      ok: false,
-      reason: "absent",
-    }));
+  test("OMW_AGENT=in-session fails with embedder hint", () => {
+    const r = resolveAdapter("auto", wf, () => true, { OMW_AGENT: "in-session" });
     expect("missing" in r && r.missing).toBe("in-session");
+    if (!("missing" in r)) throw new Error("expected missing");
+    expect(r.installHint).toContain("embedder-only");
   });
 });

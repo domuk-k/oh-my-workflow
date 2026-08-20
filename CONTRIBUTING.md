@@ -21,7 +21,7 @@ Live adapter tests (`claude`, `codex`) run only with `OMW_LIVE=1` and the corres
 | CLI flags / exit codes | `src/cli/run.ts`, `test/cli.run.test.ts` |
 | Adapters | `src/adapters/*`, matching `test/adapters.*.test.ts` |
 | Agent authoring docs | `skill/SKILL.md` (keep in sync with CLI behavior) |
-| Human docs / positioning | `README.md`, `ROADMAP.md`, `docs/site` via `bun run docs:build` |
+| Human docs / positioning | `README.md`, `ROADMAP.md`, `site/` via `bun run docs:build` |
 
 ## PR expectations
 

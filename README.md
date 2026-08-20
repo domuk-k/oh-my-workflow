@@ -37,7 +37,7 @@ bun src/cli/omw.ts run examples/deep-research --agent fake --pretty
 
 ## Why oh-my-workflow?
 
-Claude Code ships a **dynamic Workflow** tool: the model writes a JS orchestration script; the harness runs `agent()` / `parallel()` / `pipeline()` with in-harness subagents. Excellent — and closed to that host.
+Claude Code ships a **dynamic Workflow** tool: the model writes a JS orchestration script; the harness runs `agent()` / `parallel()` / `pipeline()` with in-harness subagents. Excellent — and closed to that host. omw is the **open twin**: same orchestration vocabulary, portable across CLI agents (Claude, Codex, Hermes, Pi, Gemini, Grok, …) via thin `AgentPort` adapters.
 
 **omw is the open twin.** Same authoring vocabulary, but:
 
@@ -115,13 +115,14 @@ Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` 
 | Adapter | Status | Notes |
 |---------|--------|-------|
 | **fake** | Built-in | Deterministic demo + tests; no API key |
-| **in-session** | Host probe | `--agent in-session` or `--agent auto` when the host exposes a subagent callback; no CLI fallback |
 | **claude** | Full | `claude -p --output-format json`; schema repair via `--resume` |
 | **codex** | Experimental | `codex exec --json` |
 | **hermes** | Experimental | `hermes -z` one-shot |
 | **pi** | Planned | — |
 
-`--agent auto` picks in-session when a host callback exists, else the first installed CLI. Missing adapter → exit `3` with `install_hint`. Pre-flight: `omw validate <wf>`. Resume: `omw run <wf> --resume <runId>`; opt-in safety: `--strict-resume`.
+**In-session** (host subagent callback) is **embedder-only** — `runInSessionWorkflow()` from `oh-my-workflow/in-session` with an explicit adapter. See `examples/host-runners/kiro.ts`. The CLI does not probe hosts.
+
+`--agent auto` picks the first installed CLI (or `OMW_AGENT`). Missing adapter → exit `3` with `install_hint`. Pre-flight: `omw validate <wf>`. Resume: `omw run <wf> --resume <runId>`; opt-in safety: `--strict-resume`.
 
 ---
 
@@ -129,7 +130,7 @@ Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` 
 
 - **Not** a decompiled Claude Code clone — a faithful OSS reconstruction of the dynamic-workflow *pattern*.
 - **"Deterministic"** = engine guarantees + `--agent fake`. Your script stays conventional unless you pass `--strict`.
-- **Resume** = per-node semantic cache keys; filesystem side-channels need care (see [resume deep-dive](docs/specs/2026-06-15-resume-internals-deepdive.md)).
+- **Resume** = per-node semantic cache keys; filesystem side-channels need care — use `--strict-resume` when nodes pass state via the filesystem.
 - **Nodes are heavy** — whole agent CLIs, not lightweight function calls. The novel piece is the **schema-gate self-repair loop**.
 
 ### Migrating from 0.3
@@ -156,9 +157,7 @@ Conformance suite under `conformance/` proves fan-out, pipeline, schema-gate, an
 
 - [Skill (start here)](skill/SKILL.md)
 - [Roadmap](ROADMAP.md)
-- [Docs site](https://oh-my-workflow.vercel.app)
-- [Open-twin design](docs/specs/2026-06-23-omw-open-dynamic-workflow-twin-design.md)
-- [Product spec](docs/specs/2026-06-12-oh-my-workflow-design.md)
+- [Docs site](https://oh-my-workflow.vercel.app) — built from [`site/`](site/)
 
 ## Related
 

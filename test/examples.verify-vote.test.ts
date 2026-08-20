@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { runWorkflow } from "../src/cli/run";
+import { runWorkflow, type LoadedWorkflow } from "../src/cli/run";
 import { makeFakeAdapter } from "../src/adapters/fake";
 import verifyVote, { fake } from "../examples/verify-vote/workflow";
 
@@ -12,7 +12,10 @@ test("verify-vote: abstain quorum — two judges uphold, one abstains", async ()
       pretty: false,
     },
     {
-      loadWorkflow: async () => ({ workflow: verifyVote, fake }),
+      loadWorkflow: async (): Promise<LoadedWorkflow> => ({
+        workflow: verifyVote as LoadedWorkflow["workflow"],
+        fake,
+      }),
       resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter(wf.fake) }),
       journalSink: () => {},
       now: () => 0,

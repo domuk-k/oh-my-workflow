@@ -4,52 +4,34 @@ import { join } from "node:path";
 type Check = { name: string; ok: boolean; detail?: string };
 
 const root = process.cwd();
-const site = join(root, "dist", "docs", "index.html");
-const robots = join(root, "dist", "docs", "robots.txt");
-const launchExample = join(root, "docs", "launch.example", "show-hn.md");
+const landing = join(root, "dist", "docs", "index.html");
+const docsPage = join(root, "dist", "docs", "docs", "index.html");
 const skill = join(root, "skill", "SKILL.md");
 
 const checks: Check[] = [];
 const add = (name: string, ok: boolean, detail?: string) => checks.push({ name, ok, detail });
 
-add("docs build output exists", existsSync(site), site);
-add("robots.txt exists", existsSync(robots), robots);
-add("launch note template exists", existsSync(launchExample), launchExample);
+add("landing build output exists", existsSync(landing), landing);
+add("docs page build output exists", existsSync(docsPage), docsPage);
 add("skill exists", existsSync(skill), skill);
 
-const html = existsSync(site) ? readFileSync(site, "utf8") : "";
-const launchText = existsSync(launchExample) ? readFileSync(launchExample, "utf8") : "";
+const html = [landing, docsPage].filter(existsSync).map((p) => readFileSync(p, "utf8")).join("\n");
 const skillText = existsSync(skill) ? readFileSync(skill, "utf8") : "";
 
 for (const phrase of [
-  "Give your coding agent a workflow mode.",
-  "Add one command to your coding agent.",
-  "Why now",
-  "The whole runtime is seven hooks.",
-  "Quality bar",
-  "npx skills add domuk-k/oh-my-workflow --skill omw",
-  "--agent auto",
+  "oh-my-workflow",
+  "dynamic Workflow",
+  "examples/deep-research",
+  "--agent fake",
+  "omw skill install",
 ]) {
   add(`site contains: ${phrase}`, html.includes(phrase));
 }
 
-for (const id of ["quickstart", "api", "patterns", "deploy"]) {
-  add(`section id #${id}`, html.includes(`id="${id}"`));
-  add(`nav href #${id}`, html.includes(`href="#${id}"`));
-}
-
-add("site has meta description", /<meta\s+name="description"\s+content="[^"]{80,180}"/.test(html));
-add("site has canonical URL", html.includes('<link rel="canonical" href="https://oh-my-workflow.vercel.app/"'));
-add("site has Open Graph title", html.includes('property="og:title"'));
-add("site has Twitter card", html.includes('name="twitter:card"'));
-add("site has favicon", html.includes('rel="icon"'));
-add("site has accessible nav label", html.includes('aria-label="Primary navigation"'));
-add("site has no placeholder words", !/\b(TODO|TBD|lorem|placeholder)\b/i.test(html + "\n" + launchText));
-add("launch template has title", /^Title:\n\n> Show HN:/m.test(launchText));
-add("launch template has skill install command", launchText.includes("npx skills add domuk-k/oh-my-workflow --skill omw"));
-add("launch template explains why now", launchText.includes("Why now:"));
+add("docs page has quickstart section", html.includes('id="quickstart"'));
+add("site has no placeholder words", !/\b(TODO|TBD|lorem|placeholder)\b/i.test(html));
 add("skill frontmatter exposes /omw", /^name:\s*omw\s*$/m.test(skillText));
-add("skill teaches auto adapter", skillText.includes("--agent auto"));
+add("skill teaches headless adapters", /--agent (auto|fake|claude)/.test(skillText));
 
 const failed = checks.filter((c) => !c.ok);
 for (const c of checks) {

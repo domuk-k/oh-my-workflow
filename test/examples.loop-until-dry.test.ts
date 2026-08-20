@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { runWorkflow } from "../src/cli/run";
+import { runWorkflow, type LoadedWorkflow } from "../src/cli/run";
 import { makeFakeAdapter } from "../src/adapters/fake";
 import loopUntilDry, { fake } from "../examples/loop-until-dry/workflow";
 
@@ -8,7 +8,10 @@ test("loop-until-dry: stops after two consecutive rounds with no new keys", asyn
   const outcome = await runWorkflow(
     { wfPath: "examples/loop-until-dry", agent: "fake", args: {}, pretty: false },
     {
-      loadWorkflow: async () => ({ workflow: loopUntilDry, fake }),
+      loadWorkflow: async (): Promise<LoadedWorkflow> => ({
+        workflow: loopUntilDry as LoadedWorkflow["workflow"],
+        fake,
+      }),
       resolveAdapter: (_n, wf) => ({ adapter: makeFakeAdapter(wf.fake) }),
       journalSink: (l) => lines.push(l),
       now: () => 0,

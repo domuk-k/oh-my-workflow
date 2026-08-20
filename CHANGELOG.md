@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Public `docs/` tree removed** — maintainer notes, specs, research, and openq live
+  under `docs/` locally only (gitignored). Marketing/docs ship via [`site/`](site/).
+
+### Changed (breaking)
+
+- **CLI is headless-only** — `--agent in-session` and auto-probe of host callbacks
+  are removed from `omw run`. In-session transport is **embedder-only** via
+  `runInSessionWorkflow({ wfPath }, { adapter })` or an explicit `probe` inject.
+- **`runInSessionWorkflow()`** no longer defaults to `probeInSessionHost()` — pass
+  `adapter` or `probe` explicitly. See `examples/host-runners/kiro.ts`.
+
 ## [0.4.1] — in-session transport + strict resume
 
 Aligns npm with main: host-native subagent transport, safer resume, and public
