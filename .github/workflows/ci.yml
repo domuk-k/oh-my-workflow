@@ -30,6 +30,6 @@ jobs:
           cd "$pack_dir/app"
           bun init -y >/dev/null
           bun add "$pack_dir"/oh-my-workflow-*.tgz >/dev/null
-          ./node_modules/.bin/omw run node_modules/oh-my-workflow/examples/deep-research --agent fake
+          ./node_modules/.bin/omw run examples/deep-research --agent fake
       - run: bun run docs:build
       - run: bun run docs:check
