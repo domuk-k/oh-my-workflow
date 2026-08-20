@@ -7,7 +7,7 @@
 // fs is reachable directly (this is the IO wiring command, like run.ts); the arg
 // parse is a pure function so the contract is testable without touching disk.
 
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
  *  an npm install invoked from any cwd. (Same technique as run.ts's PKG_ROOT.) */
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SKILL_NAME = "omw";
+const errMsg = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export type SkillIo = {
   stdout: (s: string) => void;
@@ -111,11 +112,28 @@ export async function skillCommand(argv: string[], io: SkillIo): Promise<number>
   const { destDir, discovers } = skillDest(parsed.agent, root);
   const dest = join(destDir, "SKILL.md");
   const updating = existsSync(dest);
-  // Clean replace, not an additive copy: drop a prior install first so a file
-  // that was removed from the bundle doesn't linger as stale content.
-  rmSync(destDir, { recursive: true, force: true });
-  mkdirSync(destDir, { recursive: true });
-  cpSync(srcDir, destDir, { recursive: true });
+  // Build the replacement before moving the current install aside. A failed
+  // copy therefore leaves the prior skill intact instead of deleting it first.
+  const parent = dirname(destDir);
+  mkdirSync(parent, { recursive: true });
+  const stage = mkdtempSync(join(parent, `.${SKILL_NAME}-install-`));
+  const backup = `${stage}-previous`;
+  try {
+    cpSync(srcDir, stage, { recursive: true });
+    if (existsSync(destDir)) renameSync(destDir, backup);
+    try {
+      renameSync(stage, destDir);
+    } catch (error) {
+      if (existsSync(backup) && !existsSync(destDir)) renameSync(backup, destDir);
+      throw error;
+    }
+    rmSync(backup, { recursive: true, force: true });
+  } catch (error) {
+    io.stderr(`skill install failed: ${errMsg(error)}${existsSync(backup) ? `; previous install preserved at ${backup}` : ""}\n`);
+    return 1;
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
 
   io.stdout(
     `${updating ? "updated" : "installed"} ${SKILL_NAME} skill → ${dest}\n` +

@@ -104,6 +104,8 @@ bun src/cli/omw.ts skill install --codex
 This installs the authoring skill, not the runtime binary. Then: *"use
 oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` and runs it through
 an installed `omw` binary or the same `bunx oh-my-workflow@0.5.0` prefix.
+Re-installation atomically replaces the generated `omw` skill directory; keep
+personal edits outside that directory.
 
 ---
 

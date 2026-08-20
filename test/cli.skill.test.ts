@@ -123,6 +123,18 @@ describe("skillCommand install", () => {
     expect(r.err()).toContain("not found");
   });
 
+  test("a missing replacement leaves the previous install intact", async () => {
+    const home = tmp("omw-home-");
+    const dest = join(home, ".agents", "skills", "omw", "SKILL.md");
+    const source = srcDir("NEW");
+    expect(await skillCommand(["install", "--codex"], mkIo({ homeDir: home, skillDir: source }).io)).toBe(0);
+    rmSync(join(source, "SKILL.md"));
+
+    const failed = mkIo({ homeDir: home, skillDir: source });
+    expect(await skillCommand(["install", "--codex"], failed.io)).toBe(1);
+    expect(readFileSync(dest, "utf8")).toBe("NEW");
+  });
+
   test("help prints usage to stdout, exit 0", async () => {
     const r = mkIo();
     expect(await skillCommand([], r.io)).toBe(0);

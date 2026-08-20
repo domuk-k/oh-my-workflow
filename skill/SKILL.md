@@ -73,7 +73,8 @@ and the test double. For real work, write the workflow and run it with an instal
 > coding agent: `bunx oh-my-workflow@0.5.0 skill install` (→ `~/.claude/skills/`;
 > `--codex` → `~/.agents/skills/`; `--opencode` → `~/.config/opencode/skills/`;
 > `--project` for one repo). `omw skill path` prints the bundled copy for other
-> hosts. Re-run `skill install` anytime to refresh.
+> hosts. Re-run `skill install` to atomically replace the generated `omw` skill
+> directory; keep personal edits outside that directory.
 
 ---
 
