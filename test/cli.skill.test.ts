@@ -105,7 +105,7 @@ describe("skillCommand install", () => {
     expect(await skillCommand(["install", "--opencode"], mkIo({ homeDir: home, skillDir }).io)).toBe(0);
 
     expect(existsSync(join(home, ".claude", "skills", "omw", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(home, ".codex", "skills", "omw", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(home, ".agents", "skills", "omw", "SKILL.md"))).toBe(true);
     expect(existsSync(join(home, ".config", "opencode", "skills", "omw", "SKILL.md"))).toBe(true);
   });
 

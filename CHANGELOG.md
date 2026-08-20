@@ -37,6 +37,8 @@ All notable changes to this project are documented here. This project adheres to
   nested host usage receipts, and reject budgeted calls when usage is absent.
 - Resume keys now include timeout and retry bounds, so tighter limits cannot
   reuse a result produced under looser execution policy.
+- Codex skill installation now targets the officially discovered
+  `.agents/skills/` path.
 
 ### Changed (breaking)
 

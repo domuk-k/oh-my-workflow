@@ -71,7 +71,7 @@ and the test double. For real work, write the workflow and run it with an instal
 
 > **Reading this as a skill?** You already have it. To install/update it for a
 > coding agent: `bunx oh-my-workflow@0.5.0 skill install` (→ `~/.claude/skills/`;
-> `--codex` → `~/.codex/skills/`; `--opencode` → `~/.config/opencode/skills/`;
+> `--codex` → `~/.agents/skills/`; `--opencode` → `~/.config/opencode/skills/`;
 > `--project` for one repo). `omw skill path` prints the bundled copy for other
 > hosts. Re-run `skill install` anytime to refresh.
 

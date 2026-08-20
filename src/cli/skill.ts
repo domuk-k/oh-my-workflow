@@ -41,7 +41,7 @@ const USAGE =
   "  install [--project] [--codex|--opencode]\n" +
   "                        copy the skill into a coding agent's skills dir so it's picked up\n" +
   "                        (default agent: claude → ~/.claude/skills/omw;\n" +
-  "                         --codex → ~/.codex/skills/…; --opencode → ~/.config/opencode/skills/…;\n" +
+  "                         --codex → ~/.agents/skills/…; --opencode → ~/.config/opencode/skills/…;\n" +
   "                         --project targets the cwd instead of home)\n" +
   "  path                  print the bundled SKILL.md path (for cat / piping / pointing an agent at it)\n";
 
@@ -73,7 +73,7 @@ export function parseSkillArgs(argv: string[]): SkillParse {
 function skillDest(agent: SkillAgent, root: string): { destDir: string; discovers: string } {
   switch (agent) {
     case "codex":
-      return { destDir: join(root, ".codex", "skills", SKILL_NAME), discovers: "Codex" };
+      return { destDir: join(root, ".agents", "skills", SKILL_NAME), discovers: "Codex" };
     case "opencode":
       return { destDir: join(root, ".config", "opencode", "skills", SKILL_NAME), discovers: "opencode" };
     case "claude":

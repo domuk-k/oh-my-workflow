@@ -32,6 +32,7 @@ jobs:
           bun add "$pack_dir"/oh-my-workflow-*.tgz >/dev/null
           ./node_modules/.bin/omw run examples/deep-research --agent fake
           ./node_modules/.bin/omw skill install --codex --project
-          test -f .codex/skills/omw/SKILL.md
+          test -s .agents/skills/omw/SKILL.md
+          grep -q '^name: omw$' .agents/skills/omw/SKILL.md
       - run: bun run docs:build
       - run: bun run docs:check
