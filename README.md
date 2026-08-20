@@ -86,10 +86,11 @@ agent to author, run, and repair these workflows.
 ## Install the skill
 
 ```sh
-omw skill install              # → ~/.claude/skills/omw
-omw skill install --codex      # → ~/.codex/skills/omw
-omw skill install --project    # → ./.claude/skills/omw
-# or: npx skills add domuk-k/oh-my-workflow --skill omw
+bunx github:domuk-k/oh-my-workflow skill install --codex
+npx skills add domuk-k/oh-my-workflow --skill omw
+
+# from a clone:
+bun src/cli/omw.ts skill install --codex
 ```
 
 Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` and runs `omw run`.
@@ -98,8 +99,8 @@ Then: *"use oh-my-workflow to &lt;task&gt;"* — the agent writes `workflow.ts` 
 
 ## Agent CLIs
 
-`fake` is the deterministic no-key demo. `claude` is the established live path;
-`codex` and `hermes` are experimental. One workflow run binds one adapter.
+`fake` is the deterministic no-key demo. `claude` is supported; `codex` and
+`hermes` are experimental. One workflow run binds one adapter.
 
 **In-session** (host subagent callback) is **embedder-only** — `runInSessionWorkflow()` from `oh-my-workflow/in-session` with an explicit adapter. See `examples/host-runners/kiro.ts`. The CLI does not probe hosts.
 

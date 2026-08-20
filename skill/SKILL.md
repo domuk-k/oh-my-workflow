@@ -522,7 +522,6 @@ agent/subagent callback directly.
 | **claude** | supported | `claude -p <p> --output-format json --strict-mcp-config` | parse `.result` | `--resume` (same cwd) |
 | **codex** | **experimental** (dogfood: 0.148.0) | `codex exec --json -s workspace-write` | last `agent_message` from JSONL | `exec resume` (same cwd) |
 | **hermes** | **experimental** | `hermes -z <prompt> --yolo` | stdout IS the response (heuristic JSON extract) | — (fresh retries) |
-| **pi** | planned | `pi --print` | stdout | — |
 
 > The "in-session follow-up" column is the adapter flag the **schema gate** uses to
 > re-prompt a node in the same session — *not* run-level resume. Run-level resume
@@ -541,13 +540,12 @@ agent/subagent callback directly.
 - **codex** is experimental: it has **no cost field** (tokens only, so `costUsd`
   stays undefined), and its JSONL can include malformed lines under MCP
   (openai/codex#15451) — omw tolerates them line-by-line and fails *actionably*
-  rather than returning empty. Default sandbox is `workspace-write`. `inheritMcp`
-  is **not implemented** — passing it logs a one-time warn and is ignored.
+  rather than returning empty. Default sandbox is `workspace-write`; user config
+  and execpolicy rules are ignored unless `{ inheritMcp: true }` is explicit.
 - **hermes** is experimental: `-z/--oneshot` prints only the response text, so the
   result is stdout (no JSON envelope; schema-gate extracts JSON heuristically).
   `--yolo` runs it non-interactively. No in-session followUp (no session id on
   stdout) → schema retries use fresh invokes. No cost field.
-- **pi** isn't wired yet (`--agent pi` → exit 3 with an install hint).
 - **in-session** is not a CLI adapter. Wire it only through the embedder API:
 
   ```ts
@@ -643,7 +641,7 @@ but cross-CLI routing is future work). Don't write scripts that assume these.
 
 - Module: `export default async ({ agent, parallel, pipeline, phase, log, workflow, budget }, args) => result` · optional `export const meta` / `export const fake`. Use `omw codemod <file> --write` to migrate pre-0.5 `(rt, args)` scripts.
 - Path resolves a directory to `workflow.js` / `workflow.ts` / `index.js` / `index.ts`.
-- `omw run <wf> [--agent <auto|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]`
+- `omw run <wf> [--agent <auto|fake|claude|codex|hermes>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]`
 - `runInSessionWorkflow(opts, { adapter | probe })` — embedder-only `oh-my-workflow/in-session`; exit `3` when neither is supplied.
 - `omw replay <journal.jsonl> [--json]`
 - `omw validate <wf> [--json]` — pre-flight: load + fake-fixture lint, no agents spawned.

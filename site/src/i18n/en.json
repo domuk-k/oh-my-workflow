@@ -14,7 +14,7 @@
   },
   "landing": {
     "pill": "parallel repo checks, one shaped result",
-    "tagline": "Run independent checks through <code>claude -p</code> or <code>codex exec</code>, assemble one result from shape-validated node outputs, and journal every failure.",
+    "tagline": "Run independent checks through <code>claude -p</code> or <code>codex exec</code>, assemble one result from shape-validated node outputs, and journal every node attempt.",
     "ctaPrimary": "Quickstart — no API key",
     "ctaSecondary": "View source",
     "twinHeading": "A small, familiar authoring shape",
@@ -34,8 +34,7 @@
       { "name": "fake", "status": "built-in", "kind": "full", "notes": "no-key deterministic demo + test double" },
       { "name": "claude", "status": "supported", "kind": "full", "notes": "JSON output + --resume schema repair" },
       { "name": "codex", "status": "experimental", "kind": "exp", "notes": "0.148.0 dogfood; usage receipts parsed from JSONL" },
-      { "name": "hermes", "status": "experimental", "kind": "exp", "notes": "one-shot; schema retries go fresh" },
-      { "name": "pi", "status": "planned", "kind": "plan", "notes": "not wired yet" }
+      { "name": "hermes", "status": "experimental", "kind": "exp", "notes": "one-shot; schema retries go fresh" }
     ]
   },
   "docs": {

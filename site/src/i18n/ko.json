@@ -14,7 +14,7 @@
   },
   "landing": {
     "pill": "repo 병렬 점검, 결과는 하나",
-    "tagline": "독립적인 점검을 <code>claude -p</code> 또는 <code>codex exec</code>로 실행하고, 형태가 검증된 노드 출력으로 결과 하나를 조립하며, 모든 실패를 journal에 남깁니다.",
+    "tagline": "독립적인 점검을 <code>claude -p</code> 또는 <code>codex exec</code>로 실행하고, 형태가 검증된 노드 출력으로 결과 하나를 조립하며, 모든 노드 시도를 journal에 남깁니다.",
     "ctaPrimary": "퀵스타트 — API 키 불필요",
     "ctaSecondary": "소스 보기",
     "twinHeading": "작고 익숙한 작성 방식",
@@ -34,8 +34,7 @@
       { "name": "fake", "status": "내장", "kind": "full", "notes": "키 없이 도는 결정적 데모 + 테스트 더블" },
       { "name": "claude", "status": "지원", "kind": "full", "notes": "JSON 출력 + --resume 스키마 자가수정" },
       { "name": "codex", "status": "실험적", "kind": "exp", "notes": "0.148.0 dogfood; JSONL usage 영수증 파싱" },
-      { "name": "hermes", "status": "실험적", "kind": "exp", "notes": "원샷; 스키마 재시도는 새 세션으로" },
-      { "name": "pi", "status": "예정", "kind": "plan", "notes": "아직 미연결" }
+      { "name": "hermes", "status": "실험적", "kind": "exp", "notes": "원샷; 스키마 재시도는 새 세션으로" }
     ]
   },
   "docs": {

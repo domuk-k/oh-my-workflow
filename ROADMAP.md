@@ -26,7 +26,7 @@ You should be able to:
 
 ---
 
-## Current release line (0.4.x)
+## Current release line (0.5.x)
 
 **Shipped**
 
@@ -37,10 +37,9 @@ You should be able to:
 
 **Next**
 
-- **0.4.1** — npm + GitHub release aligned with main (in-session, strict-resume)
-- **SKILL.md** — keep adapter table and CLI flags in sync with code
-- **Issue templates** — bug, adapter request, workflow pattern
-- **Examples** — verify-vote, loop-until-dry, budget-bounded scan (beyond `deep-research`)
+- Publish the fixed-source dogfood report and manifests.
+- Align npm 0.4.1 with its existing GitHub tag before publishing 0.5.
+- Prove the narrow job with unaffiliated repeat users.
 
 ---
 
@@ -70,8 +69,8 @@ You should be able to:
 
 | Version | Meaning |
 |---------|---------|
-| **0.4.x** | Destructured API stable; legacy `(rt, args)` bridge until **0.5** |
-| **0.5** | Remove legacy bridge; breaking changes only with CHANGELOG + codemod |
+| **0.4.x** | Destructured API with the legacy `(rt, args)` bridge |
+| **0.5** | Legacy bridge removed; breaking changes ship with CHANGELOG + codemod |
 | **1.0** | Narrow job repeated by unaffiliated users; adapter claims backed by live evidence |
 
 ---

@@ -398,7 +398,6 @@ const INSTALL_HINTS: Record<string, string> = {
   claude: "npm i -g @anthropic-ai/claude-code  (then `claude login`)",
   codex: "npm i -g @openai/codex  (experimental adapter)",
   hermes: "install the Hermes Agent CLI, then `hermes login`  (experimental adapter)",
-  pi: "see https://github.com/parallel-ai/pi  (experimental adapter)",
   "in-session":
     "in-session is embedder-only — use runInSessionWorkflow() with an explicit adapter (oh-my-workflow/in-session). CLI: omw run --agent claude|codex|fake.",
 };
@@ -479,7 +478,6 @@ export function resolveAdapter(
     if (!binExists("hermes")) return { missing: "hermes", installHint: INSTALL_HINTS.hermes! };
     return { adapter: makeHermesAdapter() };
   }
-  // pi lands here as it is built; until then, fail actionably.
   return {
     missing: name,
     installHint: INSTALL_HINTS[name] ?? `unknown adapter "${name}". Try --agent fake for the free demo.`,
@@ -507,7 +505,7 @@ export async function runCommand(argv: string[], io: Io): Promise<number> {
   if (!parsed.ok) {
     io.stderr(JSON.stringify({ error: "usage", message: parsed.error }));
     io.stderr(
-      "\nusage: omw run <workflow> [--agent <auto|fake|claude|codex|hermes|pi>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]",
+      "\nusage: omw run <workflow> [--agent <auto|fake|claude|codex|hermes>] [--args JSON] [--concurrency N] [--budget N] [--resume <journal|runId>] [--strict-resume] [--strict] [--pretty]",
     );
     return 2;
   }
