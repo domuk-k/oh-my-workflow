@@ -46,7 +46,7 @@
     "skillHeading": "스킬 설치",
     "skillBody": "Codex에 번들된 작성 스킬을 설치합니다. Claude는 --codex를 빼고, OpenCode는 --opencode를 사용하세요:",
     "hooksHeading": "훅(hooks)",
-    "hookAgentBody": "코딩에이전트 CLI 노드 하나를 실행합니다. schema를 주면 omw가 검증하고 오류를 노드에 다시 물려 최대 2회 재프롬프트합니다. 일반 노드 실패는 null이며 budget과 journal 실패는 run을 중단합니다.",
+    "hookAgentBody": "코딩에이전트 CLI 노드 하나를 실행합니다. schema를 주면 omw가 검증하고 오류를 노드에 다시 물려 최대 2회 재프롬프트합니다. 일반 실패는 null입니다. 직접 호출의 budget admission과 journal 실패는 run을 중단하지만 parallel과 pipeline은 내부 throw를 null로 바꿉니다.",
     "hookFlowBody": "아이템별 흐름 vs. 배리어. 기본은 pipeline.",
     "adaptersHeading": "어댑터",
     "adaptersBody": "노드는 헤드리스 prompt→result CLI로 구동되는 코딩에이전트입니다: fake, claude, codex, hermes. CLI가 없으면 install hint와 함께 exit 3.",

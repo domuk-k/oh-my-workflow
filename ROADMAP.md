@@ -26,9 +26,9 @@ You should be able to:
 
 ---
 
-## Current release line (0.5.x)
+## Current candidate (0.5.0)
 
-**Shipped**
+**Implemented in the candidate**
 
 - Destructured authoring surface (`budget`, nested `workflow`, `export const meta`)
 - CLI adapters: `fake`, `claude`, `codex`, `hermes`, `--agent auto`

@@ -46,7 +46,7 @@
     "skillHeading": "Install the skill",
     "skillBody": "Install the bundled authoring skill for Codex. Omit --codex for Claude, or use --opencode for OpenCode:",
     "hooksHeading": "The hooks",
-    "hookAgentBody": "Run one coding-agent CLI node. With a schema, omw validates and re-prompts the node with the errors up to 2×. Ordinary node failures return null; budget and journal failures stop the run.",
+    "hookAgentBody": "Run one coding-agent CLI node. With a schema, omw validates and re-prompts the node with the errors up to 2×. Ordinary failures return null; direct budget admission and journal failures stop the run, while parallel and pipeline convert thrown work to null.",
     "hookFlowBody": "Per-item flow vs. barrier. Default to pipeline.",
     "adaptersHeading": "Adapters",
     "adaptersBody": "A node is a coding agent driven through its headless prompt→result CLI: fake, claude, codex, hermes. A missing CLI exits 3 with an install hint.",

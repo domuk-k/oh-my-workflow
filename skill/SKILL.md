@@ -651,4 +651,4 @@ but cross-CLI routing is future work). Don't write scripts that assume these.
 - `omw skill install [--codex|--opencode] [--project]` — install this skill for a coding agent.
 - exit codes: `0` ok · `1` script/load error (incl. budget ceiling) · `2` usage · `3` adapter missing · `4` completed but a node hit `internal_error` (author bug; result still on stdout).
 - stdout = result JSON · journal = `.omw/<runId>.jsonl` · `--pretty` tree = stderr.
-- ordinary node failure → `null` → `filter(Boolean)`; budget/journal failures stop the run; quorum of cast votes for verify-vote.
+- ordinary node failure → `null` → `filter(Boolean)`; direct budget admission and journal failures stop the run, while `parallel`/`pipeline` convert thrown work to `null`; quorum of cast votes for verify-vote.
