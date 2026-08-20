@@ -27,7 +27,7 @@ bunx oh-my-workflow@0.5.0 run examples/deep-research --agent fake
 The fixture deliberately times out topic `b`; the result stays green but omits
 that topic, and the journal records the dropped node.
 
-Fan-out, schema self-repair, timeout handling — one pass, deterministic:
+Fan-out, schema self-repair, timeout handling — one deterministic fake demo:
 
 ```sh
 bunx oh-my-workflow@0.5.0 run examples/deep-research --agent fake --pretty
@@ -35,7 +35,7 @@ bunx oh-my-workflow@0.5.0 run examples/deep-research --agent fake --pretty
 
 `--agent fake` makes no agent/API network call. Swap to `--agent claude` (after `claude login`) or `--agent codex` for real runs.
 
-`bunx` uses the network to fetch the exact npm release; it requires **Bun** (not Node `npx`).
+`bunx` uses the network to fetch the exact npm release; it requires **Bun 1.3.10+** (not Node `npx`).
 
 ---
 

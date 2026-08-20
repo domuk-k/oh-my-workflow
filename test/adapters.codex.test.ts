@@ -114,9 +114,12 @@ describe("makeCodexAdapter (injected spawn)", () => {
         return { code: 0, stdout: goldenJsonl, stderr: "" };
       },
     });
-    await adapter.followUp!("thread-9", "again");
+    await adapter.followUp!("thread-9", "again", { model: "gpt-5" });
     expect(calls[0]).toContain("resume");
     expect(calls[0]).toContain("thread-9");
+    expect(calls[0]).toContain("sandbox_mode=\"workspace-write\"");
+    expect(calls[0]).toContain("-m");
+    expect(calls[0]).toContain("gpt-5");
   });
 
   test("followUp forwards timeoutMs so schema repair cannot hang forever", async () => {

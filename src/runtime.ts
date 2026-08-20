@@ -306,6 +306,7 @@ export function makeRuntime(deps: {
             // repair turn runs in the same environment as the turn it continues.
             r = await adapter.followUp(lastSessionId, retryPrompt(prompt, feedback, false), {
               cwd: effCwd,
+              model,
               inheritMcp: opts.inheritMcp,
               timeoutMs: opts.timeoutMs,
               requireOutputTokens: budgetTotal != null,

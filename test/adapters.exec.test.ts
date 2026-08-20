@@ -3,7 +3,7 @@
 // just a config (see hermes). Injected spawn → no subprocess.
 
 import { test, expect, describe } from "bun:test";
-import { makeExecAdapter, parseExecResult, type ExecAdapterConfig } from "../src/adapters/exec";
+import { defaultExecSpawn, makeExecAdapter, parseExecResult, type ExecAdapterConfig } from "../src/adapters/exec";
 
 const cfg: ExecAdapterConfig = {
   name: "demo",
@@ -45,6 +45,16 @@ describe("parseExecResult", () => {
     const r = parseExecResult({ code: 0, stdout: '{"answer":"42"}', stderr: "" }, parse, "demo");
     expect(r.ok && r.text).toBe("42");
   });
+});
+
+test("default spawn force-kills a child that ignores timeout termination", async () => {
+  const started = Date.now();
+  const result = await defaultExecSpawn(process.execPath)(
+    ["-e", 'process.on("SIGTERM",()=>{}); setInterval(()=>{},1000)'],
+    { timeoutMs: 20 },
+  );
+  expect(result.timedOut).toBe(true);
+  expect(Date.now() - started).toBeLessThan(2_000);
 });
 
 describe("makeExecAdapter", () => {

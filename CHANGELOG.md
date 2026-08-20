@@ -29,6 +29,8 @@ All notable changes to this project are documented here. This project adheres to
 - Budget admission now occurs inside the shared limiter and exhausted calls close
   their journal span. Requested worktree isolation fails closed when Git cannot
   create an isolated checkout.
+- Schema repair preserves the selected model and Codex sandbox policy. CLI
+  subprocess timeouts escalate from terminate to forced kill after a short grace.
 
 ### Changed (breaking)
 

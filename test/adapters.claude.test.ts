@@ -171,9 +171,11 @@ describe("makeClaudeAdapter (injected spawn)", () => {
         return { code: 0, stdout: JSON.stringify(golden), stderr: "" };
       },
     });
-    await adapter.followUp!("sess-123", "and again");
+    await adapter.followUp!("sess-123", "and again", { model: "claude-opus-4-8" });
     expect(calls[0]).toContain("--resume");
     expect(calls[0]).toContain("sess-123");
+    expect(calls[0]).toContain("--model");
+    expect(calls[0]).toContain("claude-opus-4-8");
   });
 
   // Regression: claude keys session history by project directory, so a resume

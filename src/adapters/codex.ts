@@ -99,10 +99,12 @@ function defaultSpawn(bin: string): Spawn {
     });
     let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let forceTimer: ReturnType<typeof setTimeout> | undefined;
     if (opts?.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => {
         timedOut = true;
         proc.kill();
+        forceTimer = setTimeout(() => proc.kill(9), 250);
       }, opts.timeoutMs);
     }
     const [stdout, stderr] = await Promise.all([
@@ -111,6 +113,7 @@ function defaultSpawn(bin: string): Spawn {
     ]);
     const code = await proc.exited;
     if (timer) clearTimeout(timer);
+    if (forceTimer) clearTimeout(forceTimer);
     return { code, stdout, stderr, timedOut };
   };
 }
@@ -174,6 +177,8 @@ export function makeCodexAdapter(deps: CodexAdapterDeps = {}): AgentPort {
     // the session without silently loading a different ambient environment.
     followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
       const args = ["exec", "resume", sessionId, "--json"];
+      args.push("-c", `sandbox_mode=${JSON.stringify(sandbox)}`);
+      if (opts?.model) args.push("-m", opts.model);
       if (!opts?.inheritMcp) args.push("--ignore-user-config", "--ignore-rules");
       args.push(prompt);
       return run(args, opts?.cwd, opts?.timeoutMs, opts?.requireOutputTokens);

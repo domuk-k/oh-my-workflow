@@ -45,10 +45,12 @@ export function defaultExecSpawn(bin: string): Spawn {
     });
     let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let forceTimer: ReturnType<typeof setTimeout> | undefined;
     if (opts?.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => {
         timedOut = true;
         proc.kill();
+        forceTimer = setTimeout(() => proc.kill(9), 250);
       }, opts.timeoutMs);
     }
     const [stdout, stderr] = await Promise.all([
@@ -57,6 +59,7 @@ export function defaultExecSpawn(bin: string): Spawn {
     ]);
     const code = await proc.exited;
     if (timer) clearTimeout(timer);
+    if (forceTimer) clearTimeout(forceTimer);
     return { code, stdout, stderr, timedOut };
   };
 }

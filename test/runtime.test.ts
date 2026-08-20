@@ -160,9 +160,10 @@ describe("runtime.agent — schema + null-contract", () => {
     expect(followUpPrompt).toContain("required property 'n'"); // errors still carried
   });
 
-  test("in-session followUp mirrors timeoutMs so repair turns stay bounded", async () => {
+  test("in-session followUp mirrors timeoutMs and model", async () => {
     const journal = makeJournal({ now: () => 0 });
     let followUpTimeout: number | undefined;
+    let followUpModel: string | undefined;
     const adapter: AgentPort = {
       name: "session-timeout-capture",
       async invoke(): Promise<AgentResult> {
@@ -170,14 +171,16 @@ describe("runtime.agent — schema + null-contract", () => {
       },
       async followUp(_sessionId, _prompt, opts): Promise<AgentResult> {
         followUpTimeout = opts?.timeoutMs;
+        followUpModel = opts?.model;
         return { ok: true, text: '{"n":8}', meta: { durationMs: 1 } };
       },
     };
     const rt = makeRuntime({ adapter, journal });
 
-    const out = await rt.agent("compute", { schema: numSchema, timeoutMs: 1234 });
+    const out = await rt.agent("compute", { schema: numSchema, timeoutMs: 1234, model: "same-model" });
     expect(out).toEqual({ n: 8 });
     expect(followUpTimeout).toBe(1234);
+    expect(followUpModel).toBe("same-model");
   });
 
   test("with no schema, returns the raw text", async () => {

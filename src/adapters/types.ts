@@ -59,7 +59,7 @@ export type InvokeRequest = {
 
 /** The subset of InvokeRequest a resume turn must mirror from its original
  *  invoke so the repair runs in the same environment and obeys the same bounds. */
-export type FollowUpOpts = Pick<InvokeRequest, "cwd" | "inheritMcp" | "timeoutMs" | "requireOutputTokens">;
+export type FollowUpOpts = Pick<InvokeRequest, "cwd" | "inheritMcp" | "timeoutMs" | "requireOutputTokens" | "model">;
 
 export type AgentPort = {
   name: string;
@@ -70,7 +70,6 @@ export type AgentPort = {
    *  by project directory, so resuming from a different cwd fails to find the
    *  session ("No conversation found"). `opts.inheritMcp` must mirror the
    *  original invoke so the resume turn sees the same MCP environment.
-   *  `opts.timeoutMs` must mirror the original invoke so a schema-repair resume
-   *  turn cannot hang longer than the node it is repairing. */
+   *  `opts.timeoutMs` and `opts.model` must mirror the original invoke. */
   followUp?(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult>;
 };

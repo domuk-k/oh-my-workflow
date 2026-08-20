@@ -84,10 +84,12 @@ function defaultSpawn(bin: string): ClaudeSpawn {
     });
     let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let forceTimer: ReturnType<typeof setTimeout> | undefined;
     if (opts?.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => {
         timedOut = true;
         proc.kill();
+        forceTimer = setTimeout(() => proc.kill(9), 250);
       }, opts.timeoutMs);
     }
     const [stdout, stderr] = await Promise.all([
@@ -96,6 +98,7 @@ function defaultSpawn(bin: string): ClaudeSpawn {
     ]);
     const code = await proc.exited;
     if (timer) clearTimeout(timer);
+    if (forceTimer) clearTimeout(forceTimer);
     return { code, stdout, stderr, timedOut };
   };
 }
@@ -179,6 +182,7 @@ export function makeClaudeAdapter(deps: ClaudeAdapterDeps = {}): AgentPort {
     // same environment as the turn it continues.
     followUp(sessionId: string, prompt: string, opts?: FollowUpOpts): Promise<AgentResult> {
       const args = ["-p", prompt, "--resume", sessionId, "--output-format", "json"];
+      if (opts?.model) args.push("--model", opts.model);
       if (!opts?.inheritMcp) args.push("--strict-mcp-config");
       return run(args, opts?.cwd, opts?.timeoutMs, opts?.requireOutputTokens);
     },

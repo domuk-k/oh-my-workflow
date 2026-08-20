@@ -1,7 +1,7 @@
 {
   "name": "oh-my-workflow",
   "version": "0.5.0",
-  "description": "Run coding-agent CLIs (claude -p / codex exec) as nodes in a plain-JS workflow. The thin deterministic glue.",
+  "description": "Run coding-agent CLIs (claude -p / codex exec) as nodes in a plain-JS workflow. Thin orchestration glue.",
   "type": "module",
   "workspaces": ["site"],
   "author": "Dongwook Kim <dannyworks102@gmail.com> (https://github.com/domuk-k)",
