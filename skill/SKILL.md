@@ -467,10 +467,10 @@ load/fixture problem.
    JavaScript modules; TypeScript is optional, but `.js` is the most portable
    artifact across coding-agent hosts. Keep host-specific in-session glue in a
    separate runner, never inside the workflow file.
-2. **Build on the null-contract.** Ordinary node failures return `null`; budget
-   exhaustion and journal I/O remain run errors. `.filter(Boolean)` after every
-   `parallel`/`pipeline`. For votes, require a quorum of *cast* (non-null) results
-   so all-abstain can't pass.
+2. **Build on the null-contract.** Ordinary node failures return `null`; a direct
+   `agent()` budget exhaustion throws, while `parallel`/`pipeline` convert that
+   throw to `null`. `.filter(Boolean)` after every `parallel`/`pipeline`. For votes,
+   require a quorum of *cast* (non-null) results so all-abstain can't pass.
 3. **Always pass a `schema` when you need structured data.** The gate's
    self-repair is the one genuine differentiator — use it instead of parsing
    prose yourself. Keep schemas tight (`required` + types).

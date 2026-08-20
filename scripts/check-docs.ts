@@ -19,6 +19,7 @@ add("skill exists", existsSync(skill), skill);
 const html = [landing, docsPage].filter(existsSync).map((p) => readFileSync(p, "utf8")).join("\n");
 const skillText = existsSync(skill) ? readFileSync(skill, "utf8") : "";
 const landingText = existsSync(landingSource) ? readFileSync(landingSource, "utf8") : "";
+const omwExample = landingText.split('<div class="lab open">')[1] ?? "";
 
 for (const phrase of [
   "oh-my-workflow",
@@ -36,7 +37,7 @@ add("skill frontmatter exposes /omw", /^name:\s*omw\s*$/m.test(skillText));
 add("skill teaches headless adapters", /--agent (auto|fake|claude)/.test(skillText));
 add(
   "landing uses workflow args as the second parameter",
-  landingText.includes('{"}"}<mark class="ins">, args</mark>)') && landingText.includes('<mark class="ins">args.</mark>topics'),
+  omwExample.includes('{"}"}<mark class="ins">, args</mark>)') && omwExample.includes('<mark class="ins">args.</mark>topics'),
 );
 
 const failed = checks.filter((c) => !c.ok);
