@@ -50,7 +50,7 @@ metadata.
 
 ## Independent release gates
 
-The following checks passed at the audited commit:
+The following code and documentation checks passed at the audited commit:
 
 - `bun run typecheck`
 - `bun test`: 268 passed, 2 skipped, 0 failed
@@ -61,9 +61,12 @@ The following checks passed at the audited commit:
 - packed CLI execution of `examples/deep-research` with `--agent fake`
 - packed Skill installation to `.agents/skills/omw`
 
-The generated candidate tarball had SHA-256
-`b51dc4e2654fba3356d3832c1d040e1733c832190cd2766453731b8c7fa1f8cc`.
-It is not committed or published.
+After the report was linked from the README, commit `9947337` was packed and
+the clean-consumer demo and Skill installation were rerun. That candidate
+tarball had SHA-256
+`169d59859389c44da606929dd21d4c244ad50f6f71aae891878fd2abca71858b`.
+It is not committed or published. The subsequent evidence-only checksum update
+does not alter the package allowlist.
 
 ## Not released
 

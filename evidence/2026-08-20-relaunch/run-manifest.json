@@ -73,10 +73,11 @@
   },
   "package": {
     "candidateVersion": "0.5.0",
+    "sourceCommit": "9947337802ddfdae721e56f18657990947ffa9c6",
     "registryLatestObserved": "0.4.0",
     "published": false,
     "tarballCommitted": false,
-    "tarballSha256": "b51dc4e2654fba3356d3832c1d040e1733c832190cd2766453731b8c7fa1f8cc"
+    "tarballSha256": "169d59859389c44da606929dd21d4c244ad50f6f71aae891878fd2abca71858b"
   },
   "releaseBlockers": [
     "npm authentication is unavailable",
