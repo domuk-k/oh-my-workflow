@@ -6,6 +6,7 @@ import type { FakeAdapterOptions } from "../../src/adapters/fake";
 
 const analysisSchema = {
   type: "object",
+  additionalProperties: false,
   required: ["id", "strengths", "risks", "evidence"],
   properties: {
     id: { type: "string" },
@@ -17,6 +18,7 @@ const analysisSchema = {
 
 const reportSchema = {
   type: "object",
+  additionalProperties: false,
   required: ["positioning", "strengths", "risks", "recommendations"],
   properties: {
     positioning: { type: "string" },
@@ -28,6 +30,7 @@ const reportSchema = {
 
 const checkSchema = {
   type: "object",
+  additionalProperties: false,
   required: ["accepted", "issues"],
   properties: {
     accepted: { type: "boolean" },
@@ -72,14 +75,16 @@ export default async function relaunchAudit({ agent, parallel, phase }: Runtime,
     agent(
       `READ-ONLY MARKET CHECK ${source.id}. Read the frozen official source at ${join(resolve(args.sourceRoot ?? repoRoot), source.inputFile)}. ` +
         `Assess overlap with this job: run independent coding-agent repo checks in parallel and return one shape-validated artifact with explicit partial-failure receipts. ` +
-        `Return concise JSON. id must be ${source.id}. Cite short source anchors in evidence; do not claim the schema proves truth.`,
+        `Return exactly one JSON object with only these top-level keys: id, strengths, risks, evidence. ` +
+        `id must be ${source.id}; the other three values must be arrays of strings. Cite short source anchors in evidence; do not claim the schema proves truth.`,
       { schema: analysisSchema, label: source.id, cwd: repoRoot, timeoutMs: 180_000, maxRetries: 0 },
     ),
   );
   const repoCalls = repoChecks.map((id) => () =>
     agent(
       `READ-ONLY REPO CHECK ${id}. Inspect ${repoRoot}. Evaluate only this facet: ${id}. ` +
-        `Find concrete strengths, overclaims, and release blockers for the narrow job. Return concise JSON; id must be ${id}. Evidence must name repo paths or commands.`,
+        `Find concrete strengths, overclaims, and release blockers for the narrow job. Return exactly one JSON object with only these top-level keys: ` +
+        `id, strengths, risks, evidence. id must be ${id}; the other three values must be arrays of strings. Evidence must name repo paths or commands.`,
       { schema: analysisSchema, label: id, cwd: repoRoot, timeoutMs: 180_000, maxRetries: 0 },
     ),
   );
@@ -89,14 +94,16 @@ export default async function relaunchAudit({ agent, parallel, phase }: Runtime,
 
   phase("Synthesize");
   const report = await agent(
-    `Synthesize this fixed-coverage audit into the narrowest credible product position. Do not add facts not present in the analyses. Return JSON.\n${JSON.stringify(analyses)}`,
+    `Synthesize this fixed-coverage audit into the narrowest credible product position. Do not add facts not present in the analyses. ` +
+      `Return exactly one JSON object with only positioning (string), strengths (string[]), risks (string[]), recommendations (string[]).\n${JSON.stringify(analyses)}`,
     { schema: reportSchema, label: "synthesis", cwd: repoRoot, timeoutMs: 180_000, maxRetries: 0 },
   );
   if (!report) throw new Error("synthesis failed");
 
   phase("Fresh-context cross-check");
   const crosscheck = await agent(
-    `Fresh-context cross-check only; this is not independent verification. Check the draft against the six supplied analyses. Return accepted=false for unsupported claims and list them.\n${JSON.stringify({ analyses, report })}`,
+    `Fresh-context cross-check only; this is not independent verification. Check the draft against the six supplied analyses. ` +
+      `Return exactly one JSON object with only accepted (boolean) and issues (string[]). Return accepted=false for unsupported claims.\n${JSON.stringify({ analyses, report })}`,
     { schema: checkSchema, label: "crosscheck", cwd: repoRoot, timeoutMs: 180_000, maxRetries: 0 },
   );
   if (!crosscheck) throw new Error("cross-check failed");
