@@ -88,7 +88,7 @@ same authoring shape and vocabulary, external coding-agent CLI nodes, no magic.
 
 ### Docs & onboarding
 
-- Added a Vercel-ready static docs site (`docs/site`, built with `bun run docs:build`)
+- Added a Vercel-ready static docs site (then `docs/site`, now `site/`; built with `bun run docs:build`)
   that leads with `/omw` skill onboarding, why the timing matters, the seven-hook
   API, core patterns, and quality signals.
 - CI now builds the docs site in addition to typecheck and tests.

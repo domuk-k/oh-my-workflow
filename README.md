@@ -83,6 +83,14 @@ agent to author, run, and repair these workflows.
 
 ## Install the skill
 
+Install the runtime once if you prefer `omw` over the pinned `bunx` commands:
+
+```sh
+bun add --global oh-my-workflow@0.5.0
+```
+
+Then install the authoring skill:
+
 ```sh
 bunx oh-my-workflow@0.5.0 skill install --codex
 

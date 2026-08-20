@@ -454,6 +454,46 @@ describe("runWorkflow — authoring surface", () => {
     expect(out.exitCode).toBe(0);
     expect(maxActive).toBe(1);
   });
+
+  test("nested workflows share call indexes so resume cannot collide with a parent node", async () => {
+    const child = { workflow: async ({ agent }: any) => agent("same") };
+    const parent = {
+      workflow: async ({ agent, workflow }: any) => ({ parent: await agent("same"), child: await workflow("child") }),
+    };
+    const lines: string[] = [];
+    let calls = 0;
+    const firstAdapter = {
+      name: "sequence",
+      invoke: async () => ({ ok: true as const, text: `value-${++calls}`, meta: { durationMs: 0 } }),
+    };
+    const common = {
+      loadWorkflow: async (path: string) => (path === "parent" ? parent : child) as any,
+      now: () => 0,
+      runId: () => "nested",
+    };
+
+    const first = await runWorkflow(
+      { wfPath: "parent", agent: "sequence", args: null, pretty: false },
+      { ...common, resolveAdapter: () => ({ adapter: firstAdapter }), journalSink: (line) => lines.push(line) },
+    );
+    expect(first.exitCode).toBe(0);
+    expect(JSON.parse(first.stdout!)).toEqual({ parent: "value-1", child: "value-2" });
+    expect(lines.map((line) => JSON.parse(line)).filter((event) => event.ev === "agent_start").map((event) => event.call)).toEqual([1, 2]);
+
+    const second = await runWorkflow(
+      { wfPath: "parent", agent: "sequence", args: null, pretty: false },
+      {
+        ...common,
+        resume: makeResumeIndexFromLines(lines),
+        resolveAdapter: () => ({
+          adapter: { name: "sequence", invoke: async () => { throw new Error("resume should not invoke"); } },
+        }),
+        journalSink: () => {},
+      },
+    );
+    expect(second.exitCode).toBe(0);
+    expect(JSON.parse(second.stdout!)).toEqual({ parent: "value-1", child: "value-2" });
+  });
 });
 
 describe("runWorkflow — --budget halts a loop", () => {

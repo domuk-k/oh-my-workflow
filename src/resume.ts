@@ -1,7 +1,7 @@
 // The resume index turns a PRIOR run's journal into a lookup: (call, promptHash,
 // optsHash) -> result. It is the read side of the frozen resume contract — the
-// same longest-unchanged-prefix key the journal records — so v2 live-resume
-// layers on without a format change. Only ok:true ends are cached; a failed node
+// same per-node semantic key the journal records. `--strict-resume` layers prefix
+// truncation on it without a format change. Only ok:true ends are cached; a failed node
 // has no entry, so resume re-runs it live (partial-failure recompute).
 
 import { type JournalEvent, parseJournalLines, resumeKey } from "./journal";

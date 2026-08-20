@@ -23,7 +23,7 @@ export type RunOptions = {
   args: unknown;
   concurrency?: number;
   pretty: boolean;
-  /** Path to a prior run's journal to resume from (longest-unchanged-prefix). */
+  /** Path to a prior run's journal for per-node semantic reuse. */
   resume?: string;
   /** Opt-in determinism sandbox: forbid Date/Math.random in the script body so a
    *  run is reproducible (matches native dynamic-workflow's freeze-throw). */
@@ -31,8 +31,7 @@ export type RunOptions = {
   /** Opt-in resume safety: after the first cache MISS by call index, force every
    *  later node live even when its key still hits (prefix truncation). */
   strictResume?: boolean;
-  /** Token ceiling for the whole run; agent() throws BudgetExceededError once the
-   *  shared spend reaches it. */
+  /** Reported output-token threshold. Concurrent calls can overshoot. */
   budget?: number;
 };
 
@@ -345,6 +344,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
   // One spend accumulator for the whole run: parent + any nested workflow()
   // child point at it, so the token pool is shared (matches native).
   const budgetState = { spent: 0 };
+  const runtimeState = { nextCall: 0, strictResumeMissAt: null };
   const limiter = makeLimiter(opts.concurrency ?? 4);
   const rt = makeRuntime({
     adapter: resolved.adapter,
@@ -354,6 +354,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
     strictResume: opts.strictResume,
     budget: opts.budget,
     budgetState,
+    runtimeState,
     limiter,
     meta: loaded.meta,
   });
@@ -377,6 +378,7 @@ export async function runWorkflow(opts: RunOptions, deps: RunDeps): Promise<RunO
         strictResume: opts.strictResume,
         budget: opts.budget,
         budgetState,
+        runtimeState,
         limiter,
         meta: childLoaded.meta,
       });

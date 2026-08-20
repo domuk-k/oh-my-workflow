@@ -53,17 +53,18 @@ export type Stage = (prev: any, item: any, index: number) => unknown | Promise<u
  *  parent and any nested workflow() child can point at the SAME counter — the
  *  token pool is shared across the whole run, not per-runtime. */
 export type BudgetState = { spent: number };
+export type RuntimeState = { nextCall: number; strictResumeMissAt: number | null };
 
 export type Runtime = {
   agent(prompt: string, opts?: AgentOpts): Promise<unknown | null>;
   pipeline(items: unknown[], ...stages: Stage[]): Promise<unknown[]>;
   parallel(thunks: Array<() => Promise<unknown>>): Promise<unknown[]>;
+  /** Available when hosted by runWorkflow(). Direct makeRuntime() calls have no loader. */
   workflow(ref: string | { scriptPath: string }, args?: unknown): Promise<unknown>;
   phase(title: string): void;
   log(msg: string): void;
-  /** Token budget view. `total` is the ceiling (null = unbounded); `spent()`
-   *  reads the shared accumulator; `remaining()` is `total - spent` (Infinity
-   *  when unbounded). The ceiling is enforced in agent() (BudgetExceededError). */
+  /** Reported output-token threshold. Concurrent calls can overshoot before the
+   *  next agent observes exhaustion. */
   budget: { total: number | null; spent(): number; remaining(): number };
 };
 
@@ -153,16 +154,15 @@ export function makeRuntime(deps: {
   concurrency?: number;
   /** Shared run-wide limiter. Nested workflows pass the parent's instance. */
   limiter?: ReturnType<typeof makeLimiter>;
-  /** A prior run's journal as a lookup. When a node's (call, promptHash,
-   *  optsHash) key hits, the adapter is skipped and the cached result returned —
-   *  the longest-unchanged-prefix resume model. A miss (incl. a prior failure)
-   *  runs live, so resume only re-executes failed/changed nodes. */
+  /** A prior run's journal as a per-node semantic lookup. */
   resume?: ResumeIndex;
-  /** Token ceiling for the run (null/undefined = unbounded). */
+  /** Reported output-token threshold for the run (null/undefined = unbounded). */
   budget?: number | null;
   /** Shared spend accumulator. When omitted, a local one is created; a nested
    *  workflow() passes the parent's so the pool is shared across the run. */
   budgetState?: BudgetState;
+  /** Shared call/resume cursor. Nested workflows pass the parent's instance. */
+  runtimeState?: RuntimeState;
   /** The workflow's meta, used to resolve the effective model per node along the
    *  `opts.model > phase model > meta.model` chain. */
   meta?: WorkflowMeta;
@@ -177,8 +177,7 @@ export function makeRuntime(deps: {
   const { adapter, journal, resume } = deps;
   const withWorktree = deps.withWorktree ?? defaultWithWorktree;
   const limit = deps.limiter ?? makeLimiter(deps.concurrency ?? 4);
-  let callCounter = 0;
-  let strictResumeMissAt: number | null = null;
+  const runtimeState = deps.runtimeState ?? { nextCall: 0, strictResumeMissAt: null };
   let currentPhase: string | undefined;
   const budgetTotal = deps.budget ?? null;
   const budgetState: BudgetState = deps.budgetState ?? { spent: 0 };
@@ -197,7 +196,7 @@ export function makeRuntime(deps: {
   };
 
   async function agent(prompt: string, opts: AgentOpts = {}): Promise<unknown | null> {
-    const call = ++callCounter;
+    const call = ++runtimeState.nextCall;
     const phase = opts.phase ?? currentPhase;
     const model = resolveModel(opts, phase);
     const pHash = promptHash(prompt);
@@ -227,13 +226,13 @@ export function makeRuntime(deps: {
     if (resume) {
       const hit = resume.lookup({ call, promptHash: pHash, optsHash: oHash });
       const forceLive =
-        deps.strictResume && strictResumeMissAt !== null && call > strictResumeMissAt;
+        deps.strictResume && runtimeState.strictResumeMissAt !== null && call > runtimeState.strictResumeMissAt;
       if (hit.found && !forceLive) {
         journal.agentEnd({ call, ok: true, result: hit.value, durationMs: 0, cached: true });
         return hit.value;
       }
-      if (!hit.found && deps.strictResume && strictResumeMissAt === null) {
-        strictResumeMissAt = call;
+      if (!hit.found && deps.strictResume && runtimeState.strictResumeMissAt === null) {
+        runtimeState.strictResumeMissAt = call;
       }
     }
 

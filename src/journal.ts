@@ -1,8 +1,8 @@
 // The journal is the product's spine: a JSONL record of every step, so the
 // authoring agent can read its own failure and repair its own script. The format
 // is resume-compatible — the resume key (callIndex, promptHash, optsHash) is the
-// same longest-unchanged-prefix idea Claude Code uses, so v2 live-resume layers
-// on without a format change. Hashes exclude wall-clock time on purpose.
+// the same per-node semantic key resume consumes. `--strict-resume` adds prefix
+// truncation without a format change. Hashes exclude wall-clock time on purpose.
 
 import { createHash } from "node:crypto";
 
