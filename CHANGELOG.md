@@ -5,6 +5,8 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-20
+
 ### Fixed
 
 - Codex `turn.completed.usage.output_tokens` now reaches runtime accounting.
